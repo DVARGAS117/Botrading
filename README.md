@@ -128,6 +128,7 @@ pytest tests/ -v --cov=src
 | # | Ticket | Estado | Cobertura |
 |---|--------|--------|-----------|
 | T44 | Gestión de credenciales y parámetros en JSON | ✅ | 94% |
+| T39 | Logging por bot y nivel | ✅ | 85% |
 | T45 | Reutilización de módulos core | 🔜 | - |
 | T46 | Tests unitarios por componente | 🔜 | - |
 | T47 | Almacenamiento seguro de credenciales | 🔜 | - |
@@ -202,6 +203,7 @@ pytest tests/unit/test_config_loader.py -v
 
 ### Fase 0: Fundamentos (En Progreso)
 - [x] T44 - Gestión de credenciales
+- [x] T39 - Logging por bot y nivel
 - [ ] T45 - Módulos core reutilizables
 - [ ] T46 - Tests unitarios
 - [ ] T47 - Almacenamiento seguro
@@ -279,10 +281,10 @@ Este proyecto es privado. Todos los derechos reservados.
 |---------|-------|
 | Tickets Totales | 52 |
 | Épicas | 16 |
-| Tickets Completados | 1 |
-| Tests | 13 |
-| Cobertura | 94% |
-| Líneas de Código | ~300 |
+| Tickets Completados | 2 |
+| Tests | 30 |
+| Cobertura | 89% |
+| Líneas de Código | ~700 |
 
 ---
 

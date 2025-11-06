@@ -41,6 +41,7 @@ config/credentials.json
 # Logs
 logs/
 *.log
+!logs/.gitkeep
 
 # OS
 .DS_Store
