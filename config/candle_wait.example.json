@@ -1,0 +1,73 @@
+{
+  "_comment": "Configuración para el módulo CandleWaiter (T37)",
+  "_description": "Este archivo configura el comportamiento de espera de cierre de velas para evitar inconsistencias en indicadores",
+  
+  "candle_wait": {
+    "enabled": true,
+    "delay_seconds": 3,
+    "timeout_seconds": 3600,
+    "strict_mode": true,
+    
+    "_delay_seconds_comment": "Segundos de espera adicional después del cierre de la vela para garantizar que los datos estén completamente disponibles",
+    "_timeout_seconds_comment": "Timeout máximo de espera (1 hora por defecto). Si se excede, wait_for_candle_close() retorna False",
+    "_strict_mode_comment": "Si es true, valida horario de trading antes de esperar. Si es false, solo espera el cierre sin validar horarios",
+    
+    "supported_timeframes": {
+      "M1": 60,
+      "M5": 300,
+      "M15": 900,
+      "M30": 1800,
+      "H1": 3600,
+      "H4": 14400,
+      "D1": 86400,
+      
+      "_comment": "Timeframes soportados con sus segundos equivalentes",
+      "_M1_comment": "1 minuto - cierra cada minuto exacto (10:30:00, 10:31:00, etc.)",
+      "_M5_comment": "5 minutos - cierra cada 5 minutos (10:00:00, 10:05:00, 10:10:00, etc.)",
+      "_M15_comment": "15 minutos - cierra cada 15 minutos (10:00:00, 10:15:00, 10:30:00, etc.)",
+      "_M30_comment": "30 minutos - cierra cada 30 minutos (10:00:00, 10:30:00, 11:00:00, etc.)",
+      "_H1_comment": "1 hora - cierra cada hora exacta (10:00:00, 11:00:00, 12:00:00, etc.)",
+      "_H4_comment": "4 horas - cierra cada 4 horas (00:00:00, 04:00:00, 08:00:00, 12:00:00, 16:00:00, 20:00:00)",
+      "_D1_comment": "1 día - cierra a medianoche (00:00:00)"
+    },
+    
+    "integration": {
+      "use_time_validator": true,
+      "time_validator_config_file": "config/schedule.example.json",
+      
+      "_use_time_validator_comment": "Si es true, CandleWaiter usa TimeValidator para validar horarios de trading antes de esperar",
+      "_time_validator_config_file_comment": "Archivo de configuración del TimeValidator (schedule.example.json contiene horarios de trading, holidays, etc.)"
+    },
+    
+    "logging": {
+      "log_waits": true,
+      "log_level": "INFO",
+      
+      "_log_waits_comment": "Si es true, registra en logs cada espera de cierre de vela",
+      "_log_level_comment": "Nivel de logging: DEBUG para detalles completos, INFO para eventos importantes, WARNING para alertas"
+    },
+    
+    "advanced": {
+      "early_close_detection_seconds": 5,
+      "max_iterations_per_wait": 600,
+      
+      "_early_close_detection_seconds_comment": "Si estamos dentro de estos segundos después de un cierre (remainder < 5), consideramos que ya cerró y no esperamos",
+      "_max_iterations_per_wait_comment": "Máximo número de iteraciones del loop interno (protección contra loops infinitos, usado principalmente en tests)"
+    }
+  },
+  
+  "usage_examples": {
+    "_example_1": "from src.core.candle_waiter import CandleWaiter",
+    "_example_2": "from src.core.time_validator import TimeValidator",
+    "_example_3": "",
+    "_example_4": "# Inicializar con config",
+    "_example_5": "time_validator = TimeValidator('config/schedule.example.json')",
+    "_example_6": "candle_waiter = CandleWaiter('M5', config, time_validator)",
+    "_example_7": "",
+    "_example_8": "# Esperar cierre de vela M5",
+    "_example_9": "if candle_waiter.wait_for_candle_close():",
+    "_example_10": "    print('Vela M5 cerrada, datos completos disponibles')",
+    "_example_11": "else:",
+    "_example_12": "    print('No se pudo esperar (fuera de horario o timeout)')"
+  }
+}

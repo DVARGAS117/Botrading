@@ -2,9 +2,9 @@
 
 > Sistema de trading automatizado con múltiples bots orquestadores, integración MT5 y decisiones impulsadas por IA Gemini
 
-[![Tests](https://img.shields.io/badge/tests-135%20passing-brightgreen)]()
-[![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)]()
-[![Python](https://img.shields.io/badge/python-3.13+-blue)]()
+[![Tests](https://img.shields.io/badge/tests-167%20passing-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)]()
+[![Python](https://img.shields.io/badge/python-3.12+-blue)]()
 [![License](https://img.shields.io/badge/license-Private-red)]()
 
 ---
@@ -12,7 +12,7 @@
 ## 📋 Estado del Proyecto
 
 **Fase Actual:** Fase 0 - Fundamentos  
-**Último Ticket Completado:** T35 - Validación hora Lima y días hábiles ✅  
+**Último Ticket Completado:** T37 - Espera de cierre de vela ✅  
 **Fecha:** 6 de Noviembre de 2025
 
 ---
@@ -41,6 +41,7 @@ BOTRADING/
 │   │   ├── credential_manager.py # ✅ Gestión segura credenciales
 │   │   ├── logger.py             # ✅ Sistema de logging
 │   │   ├── time_validator.py     # ✅ Validación horarios Lima
+│   │   ├── candle_waiter.py      # ✅ Espera cierre de vela
 │   │   ├── mt5_connector.py      # 🔜 Conexión MT5
 │   │   ├── ia_agent.py           # 🔜 Agente IA Gemini
 │   │   └── risk_manager.py       # 🔜 Gestión de riesgo
@@ -55,6 +56,7 @@ BOTRADING/
 │   ├── settings.example.json     # Configuración general
 │   ├── credentials.example.json  # Credenciales
 │   ├── schedule.example.json     # ✅ Horarios de trading
+│   ├── candle_wait.example.json  # ✅ Config espera de velas
 │   └── ia_config.example.json    # Configuración IA
 ├── tests/                        # Tests
 │   ├── unit/                     # Tests unitarios
@@ -62,7 +64,8 @@ BOTRADING/
 │   │   ├── test_config_loader.py # ✅ Tests configuración
 │   │   ├── test_credential_manager.py # ✅ Tests credenciales
 │   │   ├── test_logger.py        # ✅ Tests logging
-│   │   └── test_time_validator.py # ✅ Tests validador tiempo
+│   │   ├── test_time_validator.py # ✅ Tests validador tiempo
+│   │   └── test_candle_waiter.py # ✅ Tests espera de velas
 │   ├── integration/              # ✅ Tests de integración
 │   │   └── test_core_integration.py # ✅ Tests integración
 │   └── e2e/                      # 🔜 Tests end-to-end
@@ -73,7 +76,8 @@ BOTRADING/
 │   │   ├── T47_almacenamiento_seguro_credenciales.md  # ✅ Doc seguridad
 │   │   ├── T44_config_loader.md  # ✅ Doc config_loader
 │   │   ├── T39_logger.md         # ✅ Doc logger
-│   │   └── T35_validacion_hora_lima.md  # ✅ Doc validador tiempo
+│   │   ├── T35_validacion_hora_lima.md  # ✅ Doc validador tiempo
+│   │   └── T37_espera_cierre_vela.md  # ✅ Doc espera de velas
 │   ├── agents.md                 # Reglas del agente
 │   ├── RESUMEN_EJECUTIVO.md      # Resumen del proyecto
 │   └── TICKETS_LIST.md           # Lista de tickets
@@ -121,12 +125,14 @@ pip install -r requirements.txt
 cp config/settings.example.json config/settings.json
 cp config/credentials.example.json config/credentials.json
 cp config/schedule.example.json config/schedule.json
+cp config/candle_wait.example.json config/candle_wait.json
 cp config/ia_config.example.json config/ia_config.json
 cp .env.example .env
 
 # Editar con tus credenciales reales
 notepad config/credentials.json
 notepad config/schedule.json
+notepad config/candle_wait.json
 notepad .env
 ```
 
@@ -149,7 +155,7 @@ pytest tests/ -v --cov=src
 | T46 | Tests unitarios por componente | ✅ | 93% |
 | T47 | Almacenamiento seguro de credenciales | ✅ | 86% |
 | T35 | Validación de hora local de Lima y días hábiles | ✅ | 100% |
-| T37 | Espera por cierre de vela antes de extraer datos | 🔜 | - |
+| T37 | Espera por cierre de vela antes de extraer datos | ✅ | >90% |
 
 ---
 
@@ -188,6 +194,7 @@ pytest tests/unit/test_config_loader.py -v
 - **[T44 - Config Loader](context/DOCUMENTACION/T44_config_loader.md)** - Gestión de configuración
 - **[T39 - Logger](context/DOCUMENTACION/T39_logger.md)** - Sistema de logging
 - **[T35 - Time Validator](context/DOCUMENTACION/T35_validacion_hora_lima.md)** - Validación de horarios
+- **[T37 - Candle Waiter](context/DOCUMENTACION/T37_espera_cierre_vela.md)** - Espera de cierre de velas
 
 ---
 
@@ -234,7 +241,10 @@ pytest tests/unit/test_config_loader.py -v
 - [x] T46 - Tests unitarios
 - [x] T47 - Almacenamiento seguro
 - [x] T35 - Validación horarios
-- [ ] T37 - Espera cierre de vela
+- [x] T37 - Espera cierre de vela
+- [ ] T36 - Filtros vía configuración
+- [ ] T48 - Validación cuota IA
+- [ ] T49 - Configuración alternante IA
 
 ### Fase 1: Núcleo (Próximamente)
 - [ ] Orquestación de bots
@@ -309,10 +319,10 @@ Este proyecto es privado. Todos los derechos reservados.
 |---------|-------|
 | Tickets Totales | 52 |
 | Épicas | 16 |
-| Tickets Completados | 5 |
-| Tests | 102 |
-| Cobertura | 90% |
-| Líneas de Código | ~1,200 |
+| Tickets Completados | 7 |
+| Tests | 167 |
+| Cobertura | 92% |
+| Líneas de Código | ~2,500 |
 
 ---
 
