@@ -1,0 +1,165 @@
+{
+    "_comment": "Esquema de validación para respuestas de IA - T40",
+    "_description": "Define la estructura esperada y reglas de validación para las respuestas JSON de la IA",
+    "evaluation_decision": {
+        "_description": "Esquema para decisiones de evaluación inicial (OPERAR/NO_OPERAR)",
+        "required_fields": [
+            "accion"
+        ],
+        "valid_actions": [
+            "OPERAR",
+            "NO_OPERAR"
+        ],
+        "operar_requirements": {
+            "required_fields": [
+                "direccion",
+                "stop_loss",
+                "take_profit",
+                "riesgo_porcentaje"
+            ],
+            "optional_fields": [
+                "tipo_orden",
+                "precio_entrada",
+                "razonamiento"
+            ],
+            "conditional_fields": {
+                "LIMIT": [
+                    "precio_entrada"
+                ]
+            }
+        },
+        "no_operar_requirements": {
+            "optional_fields": [
+                "razonamiento"
+            ]
+        }
+    },
+    "reevaluation_decision": {
+        "_description": "Esquema para decisiones de reevaluación (MANTENER/ACTUALIZAR/CERRAR)",
+        "required_fields": [
+            "accion"
+        ],
+        "valid_actions": [
+            "MANTENER",
+            "ACTUALIZAR",
+            "CERRAR"
+        ],
+        "mantener_requirements": {
+            "optional_fields": [
+                "razonamiento"
+            ]
+        },
+        "actualizar_requirements": {
+            "at_least_one_required": [
+                "nuevo_stop_loss",
+                "nuevo_take_profit"
+            ],
+            "optional_fields": [
+                "razonamiento"
+            ]
+        },
+        "cerrar_requirements": {
+            "optional_fields": [
+                "razonamiento"
+            ]
+        }
+    },
+    "field_types": {
+        "accion": "string",
+        "direccion": "string",
+        "tipo_orden": "string",
+        "precio_entrada": "float",
+        "stop_loss": "float",
+        "take_profit": "float",
+        "riesgo_porcentaje": "float",
+        "nuevo_stop_loss": "float",
+        "nuevo_take_profit": "float",
+        "razonamiento": "string"
+    },
+    "field_constraints": {
+        "direccion": {
+            "valid_values": [
+                "BUY",
+                "SELL"
+            ]
+        },
+        "tipo_orden": {
+            "valid_values": [
+                "MARKET",
+                "LIMIT"
+            ],
+            "default": "MARKET"
+        },
+        "riesgo_porcentaje": {
+            "min": 1.0,
+            "max": 5.0
+        }
+    },
+    "business_logic": {
+        "BUY": {
+            "stop_loss": "< precio_entrada",
+            "take_profit": "> precio_entrada",
+            "description": "Para compras, el SL debe estar debajo y el TP arriba del precio de entrada"
+        },
+        "SELL": {
+            "stop_loss": "> precio_entrada",
+            "take_profit": "< precio_entrada",
+            "description": "Para ventas, el SL debe estar arriba y el TP debajo del precio de entrada"
+        }
+    },
+    "error_types": {
+        "json_decode_error": "JSON malformado o inválido",
+        "missing_required_field": "Campo requerido no presente",
+        "missing_conditional_field": "Campo condicional requerido no presente",
+        "invalid_field_value": "Valor de campo no válido",
+        "invalid_field_type": "Tipo de dato incorrecto",
+        "invalid_business_logic": "Violación de lógica de negocio (ej: SL/TP inconsistentes con dirección)",
+        "unknown_error": "Error no categorizado"
+    },
+    "examples": {
+        "operar_market_buy": {
+            "accion": "OPERAR",
+            "direccion": "BUY",
+            "tipo_orden": "MARKET",
+            "stop_loss": 1.2300,
+            "take_profit": 1.2500,
+            "riesgo_porcentaje": 2.0,
+            "razonamiento": "Tendencia alcista confirmada"
+        },
+        "operar_limit_sell": {
+            "accion": "OPERAR",
+            "direccion": "SELL",
+            "tipo_orden": "LIMIT",
+            "precio_entrada": 1.2450,
+            "stop_loss": 1.2500,
+            "take_profit": 1.2350,
+            "riesgo_porcentaje": 1.5,
+            "razonamiento": "Resistencia fuerte en 1.2450"
+        },
+        "no_operar": {
+            "accion": "NO_OPERAR",
+            "razonamiento": "Mercado lateral sin señales claras"
+        },
+        "mantener": {
+            "accion": "MANTENER",
+            "razonamiento": "La operación va según lo previsto"
+        },
+        "actualizar_sl_tp": {
+            "accion": "ACTUALIZAR",
+            "nuevo_stop_loss": 1.2350,
+            "nuevo_take_profit": 1.2550,
+            "razonamiento": "Ajustar SL a breakeven y extender TP"
+        },
+        "cerrar": {
+            "accion": "CERRAR",
+            "razonamiento": "Señales de reversión detectadas"
+        }
+    },
+    "usage_guidelines": {
+        "1_parse_evaluation": "Usar parse_evaluation() para respuestas de evaluación inicial",
+        "2_parse_reevaluation": "Usar parse_reevaluation() para respuestas de reevaluación de posiciones abiertas",
+        "3_safe_parsing": "Usar safe_parse_*() para evitar excepciones y manejar errores gracefully",
+        "4_error_handling": "Revisar get_error_history() y get_error_statistics() para monitorear problemas",
+        "5_business_validation": "El parser valida automáticamente SL/TP vs dirección para órdenes LIMIT"
+    }
+}
