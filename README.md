@@ -2,8 +2,8 @@
 
 > Sistema de trading automatizado con múltiples bots orquestadores, integración MT5 y decisiones impulsadas por IA Gemini
 
-[![Tests](https://img.shields.io/badge/tests-244%20passing-brightgreen)]()
-[![Coverage](https://img.shields.io/badge/coverage-89%25-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-301%20passing-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.13+-blue)]()
 [![License](https://img.shields.io/badge/license-Private-red)]()
 
@@ -12,7 +12,7 @@
 ## 📋 Estado del Proyecto
 
 **Fase Actual:** Fase 0 - Fundamentos  
-**Último Ticket Completado:** T40 - Registro de errores de parsing de respuestas IA ✅  
+**Último Ticket Completado:** T36 - Activación de filtros vía configuración ✅  
 **Fecha:** 6 de Noviembre de 2025
 
 ---
@@ -45,6 +45,7 @@ BOTRADING/
 │   │   ├── quota_validator.py    # ✅ Validación cuota IA
 │   │   ├── ia_config_manager.py  # ✅ Alternancia config IA por bot
 │   │   ├── ai_response_parser.py # ✅ Parsing y validación respuestas IA
+│   │   ├── filter_manager.py     # ✅ Gestión de filtros configurables
 │   │   ├── mt5_connector.py      # 🔜 Conexión MT5
 │   │   ├── ia_agent.py           # 🔜 Agente IA Gemini
 │   │   └── risk_manager.py       # 🔜 Gestión de riesgo
@@ -63,6 +64,7 @@ BOTRADING/
 │   ├── quota_validation.example.json # ✅ Config validación cuota IA
 │   ├── ia_profiles.example.json  # ✅ Perfiles IA alternantes
 │   ├── ai_response_schema.example.json # ✅ Schema validación respuestas IA
+│   ├── filters.example.json      # ✅ Config filtros de volatilidad/spread
 │   └── ia_config.example.json    # Configuración IA
 ├── tests/                        # Tests
 │   ├── unit/                     # Tests unitarios
@@ -74,7 +76,8 @@ BOTRADING/
 │   │   ├── test_candle_waiter.py # ✅ Tests espera de velas
 │   │   ├── test_quota_validator.py # ✅ Tests validación cuota IA
 │   │   ├── test_ia_config_manager.py # ✅ Tests config IA alternante
-│   │   └── test_ai_response_parser.py # ✅ Tests parsing respuestas IA
+│   │   ├── test_ai_response_parser.py # ✅ Tests parsing respuestas IA
+│   │   └── test_filter_manager.py # ✅ Tests filtros configurables
 │   ├── integration/              # ✅ Tests de integración
 │   │   └── test_core_integration.py # ✅ Tests integración
 │   └── e2e/                      # 🔜 Tests end-to-end
@@ -88,7 +91,8 @@ BOTRADING/
 │   │   ├── T35_validacion_hora_lima.md  # ✅ Doc validador tiempo
 │   │   ├── T37_espera_cierre_vela.md  # ✅ Doc espera de velas
 │   │   ├── T48_validacion_cuota_ia.md  # ✅ Doc validación cuota IA
-│   │   └── T49_config_alternante_ia.md  # ✅ Doc config IA alternante
+│   │   ├── T49_config_alternante_ia.md  # ✅ Doc config IA alternante
+│   │   └── T36_filtros_configurables.md  # ✅ Doc filtros configurables
 │   ├── FORMATO_RESPUESTAS_IA.md  # ✅ Formato respuestas IA validadas
 │   ├── agents.md                 # Reglas del agente
 │   ├── RESUMEN_EJECUTIVO.md      # Resumen del proyecto
@@ -141,6 +145,7 @@ cp config/candle_wait.example.json config/candle_wait.json
 cp config/quota_validation.example.json config/quota_validation.json
 cp config/ia_profiles.example.json config/ia_profiles.json
 cp config/ai_response_schema.example.json config/ai_response_schema.json
+cp config/filters.example.json config/filters.json
 cp config/ia_config.example.json config/ia_config.json
 cp .env.example .env
 
@@ -150,6 +155,7 @@ notepad config/schedule.json
 notepad config/candle_wait.json
 notepad config/quota_validation.json
 notepad config/ia_profiles.json
+notepad config/filters.json
 notepad .env
 ```
 
@@ -176,6 +182,7 @@ pytest tests/ -v --cov=src
 | T48 | Validación de cuota y disponibilidad de modelo IA | ✅ | 87% |
 | T49 | Alternancia de configuraciones de IA por bot | ✅ | 91% |
 | T40 | Registro de errores de parsing de respuestas IA | ✅ | 87% |
+| T36 | Activación de filtros vía configuración | ✅ | 86% |
 
 ---
 
@@ -217,6 +224,7 @@ pytest tests/unit/test_config_loader.py -v
 - **[T37 - Candle Waiter](context/DOCUMENTACION/T37_espera_cierre_vela.md)** - Espera de cierre de velas
 - **[T48 - Quota Validator](context/DOCUMENTACION/T48_validacion_cuota_ia.md)** - Validación de cuota IA
 - **[T49 - IA Config Manager](context/DOCUMENTACION/T49_config_alternante_ia.md)** - Alternancia de configuraciones IA
+- **[T36 - Filter Manager](context/DOCUMENTACION/T36_filtros_configurables.md)** - Filtros configurables
 - **[Formato Respuestas IA](context/FORMATO_RESPUESTAS_IA.md)** - Formato JSON para prompts IA
 
 ---
@@ -269,7 +277,7 @@ pytest tests/unit/test_config_loader.py -v
 - [x] T48 - Validación cuota IA
 - [x] T49 - Alternancia configuración IA
 - [x] T40 - Registro errores parsing IA
-- [ ] T36 - Filtros vía configuración
+- [x] T36 - Filtros vía configuración
 
 ### Fase 1: Núcleo (Próximamente)
 - [ ] Orquestación de bots
@@ -344,10 +352,10 @@ Este proyecto es privado. Todos los derechos reservados.
 |---------|-------|
 | Tickets Totales | 52 |
 | Épicas | 16 |
-| Tickets Completados | 10 |
-| Tests | 244 |
-| Cobertura | 89% |
-| Líneas de Código | ~4,200 |
+| Tickets Completados | 11 |
+| Tests | 301 |
+| Cobertura | 90% |
+| Líneas de Código | ~4,700 |
 
 ---
 
