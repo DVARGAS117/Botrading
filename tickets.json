@@ -1,0 +1,591 @@
+{
+  "project": {
+    "id": "PVT_kwHODXaYj84BHQWk",
+    "number": 2,
+    "title": "Botrading"
+  },
+  "epics": [
+    {
+      "id": "epic_orchestration",
+      "title": "Épica: Orquestación",
+      "description": "La plataforma se compone de múltiples bots orquestadores independientes que ejecutan el flujo principal por ciclos, aplican filtros y coordinan los componentes de datos, IA, ejecución y persistencia.",
+      "phase": 1,
+      "priority": "P0"
+    },
+    {
+      "id": "epic_mt5_integration",
+      "title": "Épica: Integración MT5",
+      "description": "El sistema debe conectarse a MT5 para extraer velas cerradas, precios actuales, consultar posiciones, abrir órdenes Market/Limit, modificar SL/TP y cerrar posiciones.",
+      "phase": 1,
+      "priority": "P0"
+    },
+    {
+      "id": "epic_ia_gemini",
+      "title": "Épica: IA (Gemini)",
+      "description": "La decisión de operar y la reevaluación se delegan a un agente de IA Gemini con prompts estructurados y respuestas JSON.",
+      "phase": 2,
+      "priority": "P0"
+    },
+    {
+      "id": "epic_dual_market_limit",
+      "title": "Épica: Dual Market/Limit",
+      "description": "Siempre que la IA decide operar, el bot abre dos operaciones simultáneas, una Market y otra Limit, para comparar rendimientos.",
+      "phase": 2,
+      "priority": "P1"
+    },
+    {
+      "id": "epic_magic_numbers",
+      "title": "Épica: Magic Numbers",
+      "description": "El sistema identifica operaciones con un Magic Number de seis dígitos que codifica Bot, IA y Tipo de orden.",
+      "phase": 1,
+      "priority": "P0"
+    },
+    {
+      "id": "epic_multi_asset",
+      "title": "Épica: Multi-activo",
+      "description": "Cada bot itera sobre una lista configurable de activos, limitando a una operación por activo y evento.",
+      "phase": 1,
+      "priority": "P0"
+    },
+    {
+      "id": "epic_indicators_images",
+      "title": "Épica: Indicadores e imágenes",
+      "description": "Los bots numéricos calculan EMA 20/50, RSI, MACD y volumen en 5M, 15M y 1H, y los bots visuales generan imágenes.",
+      "phase": 2,
+      "priority": "P1"
+    },
+    {
+      "id": "epic_reevaluation",
+      "title": "Épica: Reevaluación",
+      "description": "Cuando hay operaciones abiertas, se ejecuta un ciclo de reevaluación cada 10 minutos con datos actualizados.",
+      "phase": 2,
+      "priority": "P1"
+    },
+    {
+      "id": "epic_risk_conversion",
+      "title": "Épica: Riesgo y conversión de activos",
+      "description": "El tamaño de lote debe calcularse por porcentaje de riesgo considerando la distancia al SL.",
+      "phase": 2,
+      "priority": "P0"
+    },
+    {
+      "id": "epic_persistence",
+      "title": "Épica: Persistencia y trazabilidad",
+      "description": "Se debe usar SQLite para registrar operaciones, consultas a IA, tokens, costos y métricas diarias.",
+      "phase": 3,
+      "priority": "P0"
+    },
+    {
+      "id": "epic_filters_schedules",
+      "title": "Épica: Filtros y horarios",
+      "description": "El único filtro obligatorio inicial es el horario y días hábiles de Lima.",
+      "phase": 0,
+      "priority": "P0"
+    },
+    {
+      "id": "epic_errors_logging",
+      "title": "Épica: Errores y logging",
+      "description": "El sistema debe reintentar hasta tres veces fallos de MT5 y API de IA, registrar errores.",
+      "phase": 1,
+      "priority": "P0"
+    },
+    {
+      "id": "epic_metrics_monitoring",
+      "title": "Épica: Métricas y monitoreo",
+      "description": "Las métricas diarias por bot deben resumir operaciones, resultados y costos de IA.",
+      "phase": 3,
+      "priority": "P1"
+    },
+    {
+      "id": "epic_configuration_modularity",
+      "title": "Épica: Configuración y modularidad",
+      "description": "El código debe ser modular con responsabilidades pequeñas por archivo.",
+      "phase": 0,
+      "priority": "P0"
+    },
+    {
+      "id": "epic_security_accounts",
+      "title": "Épica: Seguridad y cuentas/APIs",
+      "description": "El sistema requiere cuentas MT5 y claves de API activas administradas de forma segura.",
+      "phase": 0,
+      "priority": "P0"
+    },
+    {
+      "id": "epic_roadmap_quality",
+      "title": "Épica: Roadmap y calidad",
+      "description": "La implementación se estructura en fases con entregables claros.",
+      "phase": 4,
+      "priority": "P0"
+    }
+  ],
+  "tickets": [
+    {
+      "number": 1,
+      "title": "Ejecución de ciclo por bot a inicio de hora",
+      "epic": "epic_orchestration",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como operador del sistema, quiero que cada bot ejecute su ciclo exactamente al inicio de cada hora, para respetar el modelo operativo de evaluación en ventana 06:00–13:00 Perú.",
+      "acceptance_criteria": "Escenario: El bot ejecuta su ciclo a inicio de hora\n  Dado que la hora local de Lima es HH:00 dentro de 06:00–13:00 en día hábil\n  Cuando el bot inicia su ciclo con un ligero retraso para asegurar velas cerradas\n  Entonces el ciclo comienza exactamente al inicio de la hora configurada"
+    },
+    {
+      "number": 2,
+      "title": "Aplicación de filtros de horario y días hábiles",
+      "epic": "epic_orchestration",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como bot orquestador, quiero aplicar filtros de horario y días hábiles antes de iniciar cualquier evaluación, para evitar operaciones fuera de condiciones permitidas.",
+      "acceptance_criteria": "Escenario: Aplicar filtros de horario y días hábiles antes de evaluar\n  Dado que la ejecución verifica día laborable y franja 06:00–13:00 Lima\n  Cuando los filtros no se cumplen\n  Entonces el bot omite la evaluación y registra el motivo en logs"
+    },
+    {
+      "number": 3,
+      "title": "Instancias independientes por bot",
+      "epic": "epic_orchestration",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como operador del sistema, quiero que cada bot sea una instancia independiente ejecutable y monitoreable por separado, para facilitar pruebas A/B y mantenimiento.",
+      "acceptance_criteria": "Escenario: Instancias independientes por bot\n  Dado que cada bot se despliega como proceso/servicio independiente\n  Cuando se requieren pruebas A/B o reinicios individuales\n  Entonces cada bot puede iniciarse, detenerse y monitorearse sin afectar a los otros"
+    },
+    {
+      "number": 4,
+      "title": "Verificación de operación abierta por activo y Magic Number",
+      "epic": "epic_orchestration",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como bot orquestador, quiero verificar si existe una operación abierta por activo y Magic Number antes de evaluar una nueva entrada, para forzar la ruta de reevaluación cuando corresponda.",
+      "acceptance_criteria": "Escenario: Verificar operación abierta por activo y Magic Number\n  Dado que el bot conoce el símbolo actual y su Magic Number\n  Cuando consulta posiciones abiertas en MT5 filtrando por símbolo y Magic Number\n  Entonces decide ruta de reevaluación si existe al menos una posición abierta"
+    },
+    {
+      "number": 5,
+      "title": "Parámetros globales centralizados",
+      "epic": "epic_orchestration",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como administrador, quiero que los parámetros globales estén centralizados en archivos de configuración, para modificar activos, horarios y credenciales sin tocar código.",
+      "acceptance_criteria": "Escenario: Parámetros globales centralizados\n  Dado que existen archivos de configuración JSON para horarios, activos y credenciales\n  Cuando se modifica un parámetro en config sin tocar código\n  Entonces el bot aplica el nuevo valor en el siguiente ciclo de ejecución"
+    },
+    {
+      "number": 6,
+      "title": "Verificación de conexión MT5 al inicio",
+      "epic": "epic_mt5_integration",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como bot, quiero inicializar y verificar la conexión a MT5 al inicio del ciclo, para asegurar disponibilidad antes de extraer datos u operar.",
+      "acceptance_criteria": "Escenario: Verificar conexión MT5 al inicio\n  Dado que el bot inicia el ciclo\n  Cuando valida la conexión a MT5 con reintentos configurados\n  Entonces continúa solo si la conexión está disponible, de lo contrario aborta el ciclo"
+    },
+    {
+      "number": 7,
+      "title": "Extracción de velas cerradas OHLCV por timeframe",
+      "epic": "epic_mt5_integration",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como bot, quiero extraer OHLCV de velas cerradas por timeframe requerido, para calcular indicadores de forma consistente y estable.",
+      "acceptance_criteria": "Escenario: Extraer velas cerradas OHLCV por timeframe\n  Dado que el bot requiere datos 5M, 15M y 1H de velas cerradas\n  Cuando solicita OHLCV a MT5 para los timeframes requeridos\n  Entonces recibe datos consistentes de velas cerradas sin usar datos parciales"
+    },
+    {
+      "number": 8,
+      "title": "Consulta de posiciones por símbolo y Magic Number",
+      "epic": "epic_mt5_integration",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como bot, quiero consultar y filtrar posiciones abiertas por símbolo y Magic Number, para determinar si ejecutar reevaluación.",
+      "acceptance_criteria": "Escenario: Consultar posiciones por símbolo y Magic Number\n  Dado que existen posiciones abiertas en MT5\n  Cuando el bot filtra por símbolo y Magic Number\n  Entonces obtiene únicamente las posiciones relevantes para ese bot y tipo de orden"
+    },
+    {
+      "number": 9,
+      "title": "Envío de órdenes y gestión de SL/TP/cierre",
+      "epic": "epic_mt5_integration",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como bot, quiero enviar órdenes Market y Limit y luego modificar SL/TP o cerrar, para cumplir el ciclo de vida de la operación.",
+      "acceptance_criteria": "Escenario: Enviar órdenes y gestionar SL/TP/cierre\n  Dado que la IA indica operar con parámetros válidos\n  Cuando el bot envía órdenes Market o Limit y luego modifica SL/TP o cierra según decisión\n  Entonces las operaciones quedan reflejadas en MT5 con los parámetros confirmados"
+    },
+    {
+      "number": 10,
+      "title": "Construcción de prompt y recepción de JSON de decisión",
+      "epic": "epic_ia_gemini",
+      "phase": 2,
+      "priority": "P0",
+      "description": "Como orquestador, quiero construir prompts específicos por tipo de bot y enviar a Gemini 2.5 Pro, para recibir decisiones en formato JSON con campos de dirección, SL, TP y riesgo.",
+      "acceptance_criteria": "Escenario: Construir prompt y recibir JSON de decisión\n  Dado que el bot prepara payload numérico/visual según su tipo\n  Cuando envía el prompt a Gemini 2.5 Pro con parámetros configurados\n  Entonces recibe una respuesta JSON válida con dirección, SL, TP y riesgo"
+    },
+    {
+      "number": 11,
+      "title": "Registro de tokens y costo por consulta",
+      "epic": "epic_ia_gemini",
+      "phase": 2,
+      "priority": "P0",
+      "description": "Como analista de costos, quiero registrar tokens input/output y costo por cada consulta, para medir la eficiencia económica de cada metodología.",
+      "acceptance_criteria": "Escenario: Registrar tokens y costo por consulta\n  Dado que se realiza una consulta a IA\n  Cuando el proveedor devuelve uso de tokens input/output y costo\n  Entonces se persiste tokens y costo asociados a la operación o reevaluación"
+    },
+    {
+      "number": 12,
+      "title": "Mantenimiento de contexto de conversación en reevaluación",
+      "epic": "epic_ia_gemini",
+      "phase": 2,
+      "priority": "P1",
+      "description": "Como bot, quiero mantener el contexto conversacional mediante IDs de conversación, para que la reevaluación considere el historial de la operación.",
+      "acceptance_criteria": "Escenario: Mantener contexto de conversación en reevaluación\n  Dado que existe un ID de conversación previo para la operación\n  Cuando el bot envía una reevaluación\n  Entonces la IA recibe y utiliza el contexto histórico de esa operación"
+    },
+    {
+      "number": 13,
+      "title": "Parametrización de modelo y tiempo de espera",
+      "epic": "epic_ia_gemini",
+      "phase": 2,
+      "priority": "P1",
+      "description": "Como operador, quiero parametrizar modelo, temperatura, max tokens y timeout en un JSON, para experimentar sin cambios de código.",
+      "acceptance_criteria": "Escenario: Parametrizar modelo y tiempo de espera\n  Dado que el archivo de configuración define modelo, temperatura, max tokens y timeout\n  Cuando se actualiza la configuración\n  Entonces la siguiente llamada a IA usa los nuevos parámetros"
+    },
+    {
+      "number": 14,
+      "title": "Apertura simultánea de órdenes Market y Limit",
+      "epic": "epic_dual_market_limit",
+      "phase": 2,
+      "priority": "P1",
+      "description": "Como operador, quiero que se abran dos órdenes (Market y Limit) con los mismos parámetros de SL/TP y riesgo cuando la IA decide OPERAR, para medir desempeño comparado.",
+      "acceptance_criteria": "Escenario: Abrir órdenes Market y Limit simultáneamente\n  Dado que la IA decide OPERAR con parámetros válidos\n  Cuando el bot ejecuta la apertura\n  Entonces se crean dos órdenes: una Market y una Limit con mismos SL/TP y riesgo"
+    },
+    {
+      "number": 15,
+      "title": "Registro y comparación de desempeño Market vs Limit",
+      "epic": "epic_dual_market_limit",
+      "phase": 2,
+      "priority": "P1",
+      "description": "Como analista, quiero registrar y comparar P/L de Market vs Limit y su tasa de activación, para extraer conclusiones de efectividad por bot y activo.",
+      "acceptance_criteria": "Escenario: Registrar y comparar desempeño Market vs Limit\n  Dado que existen resultados P/L para ambos tipos de orden\n  Cuando se consolidan métricas por operación y por día\n  Entonces queda disponible la comparación de P/L y activación entre Market y Limit"
+    },
+    {
+      "number": 16,
+      "title": "Reevaluación independiente de Market y Limit",
+      "epic": "epic_dual_market_limit",
+      "phase": 2,
+      "priority": "P1",
+      "description": "Como bot, quiero reevaluar Market y Limit de forma independiente, para permitir decisiones divergentes en cada una según condiciones actuales.",
+      "acceptance_criteria": "Escenario: Reevaluación independiente de Market y Limit\n  Dado que hay un par Market y Limit abiertos\n  Cuando el bot solicita reevaluación para cada uno\n  Entonces puede mantener, actualizar o cerrar cada orden de manera independiente"
+    },
+    {
+      "number": 17,
+      "title": "Generación de Magic Number único con estructura",
+      "epic": "epic_magic_numbers",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como sistema, quiero generar Magic Numbers únicos con estructura [Bot][IA][Tipo], para identificar inequívocamente cada operación.",
+      "acceptance_criteria": "Escenario: Generar Magic Number único con estructura [Bot][IA][Tipo]\n  Dado que el bot conoce sus IDs de bot, IA y tipo de orden\n  Cuando necesita identificar una operación\n  Entonces genera un Magic Number de seis dígitos único y decodificable"
+    },
+    {
+      "number": 18,
+      "title": "Decodificación de Magic Number para auditoría",
+      "epic": "epic_magic_numbers",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como operador, quiero decodificar Magic Numbers para auditar origen y tipo de operación, para análisis y soporte.",
+      "acceptance_criteria": "Escenario: Decodificar Magic Number para auditoría\n  Dado que existe un Magic Number registrado\n  Cuando un operador lo consulta\n  Entonces puede obtener bot, IA y tipo de orden a partir del número"
+    },
+    {
+      "number": 19,
+      "title": "Filtrado de posiciones por Magic Number en MT5",
+      "epic": "epic_magic_numbers",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como bot, quiero filtrar y consultar posiciones por Magic Number en MT5, para operar y reevaluar con precisión.",
+      "acceptance_criteria": "Escenario: Filtrar posiciones por Magic Number en MT5\n  Dado que hay múltiples operaciones abiertas\n  Cuando se filtra por Magic Number\n  Entonces se listan solo las posiciones del bot y tipo correctos"
+    },
+    {
+      "number": 20,
+      "title": "Administración de lista de activos en configuración",
+      "epic": "epic_multi_asset",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como administrador, quiero administrar la lista de activos en config/assets.json, para habilitar o deshabilitar símbolos sin despliegue.",
+      "acceptance_criteria": "Escenario: Administrar lista de activos en configuración\n  Dado que existe config/assets.json con símbolos habilitados\n  Cuando se agrega o deshabilita un símbolo\n  Entonces el bot itera únicamente los activos habilitados en el siguiente ciclo"
+    },
+    {
+      "number": 21,
+      "title": "Garantía de una sola operación por activo y evento",
+      "epic": "epic_multi_asset",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como bot, quiero garantizar una sola operación por activo por evento (market/limit), para evitar duplicidades y violaciones de la regla operacional.",
+      "acceptance_criteria": "Escenario: Asegurar una sola operación por activo y evento\n  Dado que el bot evalúa un símbolo\n  Cuando detecta una operación abierta para ese símbolo y evento (market/limit)\n  Entonces bloquea nuevas entradas para ese símbolo y evento hasta cierre"
+    },
+    {
+      "number": 22,
+      "title": "Iteración determinista de activos",
+      "epic": "epic_multi_asset",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como operador, quiero iterar activos de forma determinista en cada ciclo, para asegurar cobertura y consistencia en la evaluación.",
+      "acceptance_criteria": "Escenario: Iteración determinista de activos\n  Dado que la lista de activos está ordenada en configuración\n  Cuando el bot inicia un ciclo\n  Entonces procesa los activos en el mismo orden determinista"
+    },
+    {
+      "number": 23,
+      "title": "Cálculo y formato de indicadores por timeframe",
+      "epic": "epic_indicators_images",
+      "phase": 2,
+      "priority": "P1",
+      "description": "Como bot numérico, quiero calcular y formatear indicadores por los tres timeframes, para enviar un payload consistente a IA.",
+      "acceptance_criteria": "Escenario: Calcular indicadores por timeframe\n  Dado que existen velas cerradas 5M, 15M y 1H\n  Cuando el bot numérico calcula EMA 20/50, RSI, MACD y volumen\n  Entonces construye un JSON consistente para la IA por cada timeframe"
+    },
+    {
+      "number": 24,
+      "title": "Generación de imágenes por timeframe con estilos consistentes",
+      "epic": "epic_indicators_images",
+      "phase": 2,
+      "priority": "P1",
+      "description": "Como bot visual, quiero generar imágenes por timeframe con estilos consistentes y, según el bot, con indicadores superpuestos o separados, para habilitar análisis visual por IA.",
+      "acceptance_criteria": "Escenario: Generar imágenes por timeframe con estilos consistentes\n  Dado que el bot visual tiene configurado estilo con/sin indicadores\n  Cuando genera imágenes de 5M, 15M y 1H\n  Entonces produce archivos compatibles con Gemini con el estilo definido"
+    },
+    {
+      "number": 25,
+      "title": "Alternancia entre entradas numéricas, visuales o híbridas",
+      "epic": "epic_indicators_images",
+      "phase": 2,
+      "priority": "P1",
+      "description": "Como orquestador, quiero alternar entre entradas numéricas, visuales o híbridas según el bot, para comparar metodologías de señal.",
+      "acceptance_criteria": "Escenario: Alternar entradas numéricas, visuales o híbridas\n  Dado que el tipo de bot está definido en configuración\n  Cuando el orquestador prepara el payload\n  Entonces envía a IA datos numéricos, imágenes o ambos según el bot"
+    },
+    {
+      "number": 26,
+      "title": "Reevaluación cada 10 minutos con datos actualizados",
+      "epic": "epic_reevaluation",
+      "phase": 2,
+      "priority": "P1",
+      "description": "Como bot, quiero reevaluar operaciones abiertas cada 10 minutos con velas cerradas e indicadores actuales, para reaccionar a cambios de mercado.",
+      "acceptance_criteria": "Escenario: Reevaluar cada 10 minutos con datos actualizados\n  Dado que existe una posición abierta\n  Cuando se cumple el intervalo de 10 minutos desde la última reevaluación\n  Entonces el bot envía nueva evaluación con velas cerradas e indicadores actuales"
+    },
+    {
+      "number": 27,
+      "title": "Aplicación de decisión de actualizar SL/TP o cerrar",
+      "epic": "epic_reevaluation",
+      "phase": 2,
+      "priority": "P1",
+      "description": "Como bot, quiero aplicar la decisión de IA de actualizar SL/TP o cerrar posiciones, para gestionar activamente el riesgo y el resultado.",
+      "acceptance_criteria": "Escenario: Aplicar decisión de actualizar SL/TP o cerrar\n  Dado que la IA devuelve una decisión de gestión\n  Cuando la decisión es actualizar SL/TP o cerrar\n  Entonces el bot ejecuta la acción en MT5 y registra el resultado"
+    },
+    {
+      "number": 28,
+      "title": "Registro de trazabilidad de cada reevaluación",
+      "epic": "epic_reevaluation",
+      "phase": 2,
+      "priority": "P1",
+      "description": "Como auditor, quiero registrar cada reevaluación con decisión, tokens y costos asociados, para mantener trazabilidad completa.",
+      "acceptance_criteria": "Escenario: Registrar trazabilidad de cada reevaluación\n  Dado que se realizó una reevaluación\n  Cuando se persisten decisión, tokens y costos\n  Entonces la operación queda con historial completo de reevaluaciones"
+    },
+    {
+      "number": 29,
+      "title": "Cálculo de lote por % riesgo y distancia al SL",
+      "epic": "epic_risk_conversion",
+      "phase": 2,
+      "priority": "P0",
+      "description": "Como gestor de riesgo, quiero calcular el lote en función del % de riesgo, distancia al SL y valor por tick, para normalizar el riesgo entre activos heterogéneos.",
+      "acceptance_criteria": "Escenario: Calcular lote por % riesgo y distancia al SL\n  Dado que se conoce el % de riesgo, precio de entrada, SL y valor por tick\n  Cuando se calcula el tamaño de la posición\n  Entonces el lote resultante normaliza el riesgo entre activos heterogéneos"
+    },
+    {
+      "number": 30,
+      "title": "Ajuste de lote a step y límites del símbolo",
+      "epic": "epic_risk_conversion",
+      "phase": 2,
+      "priority": "P0",
+      "description": "Como bot, quiero ajustar el lote al step permitido y a los mínimos y máximos de MT5, para cumplir restricciones del símbolo.",
+      "acceptance_criteria": "Escenario: Ajustar lote a step y límites del símbolo\n  Dado que MT5 expone step, mínimos y máximos de volumen\n  Cuando el cálculo de lote excede límites o no respeta el step\n  Entonces el lote se ajusta al valor permitido más cercano"
+    },
+    {
+      "number": 31,
+      "title": "Obtención de especificaciones del símbolo desde MT5",
+      "epic": "epic_risk_conversion",
+      "phase": 2,
+      "priority": "P0",
+      "description": "Como desarrollador, quiero obtener especificaciones del activo desde MT5 antes del cálculo, para evitar supuestos incorrectos.",
+      "acceptance_criteria": "Escenario: Obtener especificaciones del símbolo desde MT5\n  Dado que se va a calcular el lote\n  Cuando se consultan dígitos, valor por tick y tamaño de contrato en MT5\n  Entonces el cálculo usa datos reales del símbolo sin supuestos"
+    },
+    {
+      "number": 32,
+      "title": "Persistencia de operaciones con parámetros y estados",
+      "epic": "epic_persistence",
+      "phase": 3,
+      "priority": "P0",
+      "description": "Como auditor, quiero almacenar en la tabla operaciones todos los parámetros de la orden, estados y resultados, para análisis posterior y cumplimiento.",
+      "acceptance_criteria": "Escenario: Persistir operaciones con parámetros y estados\n  Dado que se abre o modifica una operación\n  Cuando se registra en SQLite con índices definidos\n  Entonces quedan almacenados parámetros, estados, tiempos y resultados"
+    },
+    {
+      "number": 33,
+      "title": "Registro de consultas a IA con prompts, respuesta, tokens y costo",
+      "epic": "epic_persistence",
+      "phase": 3,
+      "priority": "P0",
+      "description": "Como analista, quiero registrar consultas a IA con prompt, respuesta, tokens y costo, para evaluar eficiencia y calidad de decisión.",
+      "acceptance_criteria": "Escenario: Registrar consultas a IA con prompts, respuesta, tokens y costo\n  Dado que se envía una consulta a IA\n  Cuando se recibe la respuesta\n  Entonces se guarda prompt, respuesta, tokens, costo y referencias a la operación"
+    },
+    {
+      "number": 34,
+      "title": "Consolidación de métricas diarias por bot",
+      "epic": "epic_persistence",
+      "phase": 3,
+      "priority": "P0",
+      "description": "Como operador, quiero consolidar métricas diarias por bot (winrate, profit factor, costos IA), para revisar desempeño agregado.",
+      "acceptance_criteria": "Escenario: Consolidar métricas diarias por bot\n  Dado que existen operaciones y consultas registradas en el día\n  Cuando se ejecuta el consolidado diario\n  Entonces se calculan winrate, profit factor, P/L por tipo de orden y costo IA"
+    },
+    {
+      "number": 35,
+      "title": "Validación de hora local de Lima y días hábiles",
+      "epic": "epic_filters_schedules",
+      "phase": 0,
+      "priority": "P0",
+      "description": "Como operador, quiero validar hora local de Lima y días hábiles antes de operar, para alinear el sistema al horario de trabajo definido.",
+      "acceptance_criteria": "Escenario: Validar hora local de Lima y días hábiles\n  Dado que el sistema conoce el timezone America/Lima\n  Cuando la fecha u hora no cumplen las reglas\n  Entonces el bot no evalúa ni opera y registra la causa"
+    },
+    {
+      "number": 36,
+      "title": "Activación de filtros futuros vía configuración",
+      "epic": "epic_filters_schedules",
+      "phase": 0,
+      "priority": "P1",
+      "description": "Como administrador, quiero activar futuros filtros de volatilidad y spread vía config/filters.json, para evolucionar la gobernanza de señales.",
+      "acceptance_criteria": "Escenario: Activar filtros futuros vía configuración\n  Dado que existe config/filters.json\n  Cuando se habilita un filtro de volatilidad o spread\n  Entonces el bot aplica el filtro sin cambiar el código fuente"
+    },
+    {
+      "number": 37,
+      "title": "Espera por cierre de vela antes de extraer datos",
+      "epic": "epic_filters_schedules",
+      "phase": 0,
+      "priority": "P0",
+      "description": "Como bot, quiero esperar el cierre de vela y un pequeño delay antes de extraer datos, para evitar inconsistencias en indicadores.",
+      "acceptance_criteria": "Escenario: Esperar cierre de vela antes de extraer datos\n  Dado que está por cerrar la vela del timeframe objetivo\n  Cuando se aplica un pequeño delay configurado tras el cierre\n  Entonces los indicadores se calculan únicamente con velas cerradas"
+    },
+    {
+      "number": 38,
+      "title": "Reintentos automáticos con backoff",
+      "epic": "epic_errors_logging",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como operador, quiero reintentos automáticos con backoff ante fallos de MT5 o IA, para mejorar resiliencia sin intervención manual.",
+      "acceptance_criteria": "Escenario: Reintentos automáticos con backoff\n  Dado que una llamada a MT5 o IA falla temporalmente\n  Cuando el bot aplica hasta tres reintentos con backoff\n  Entonces la operación continúa si el reintento tiene éxito o se aborta con registro si no"
+    },
+    {
+      "number": 39,
+      "title": "Logging por bot y nivel",
+      "epic": "epic_errors_logging",
+      "phase": 1,
+      "priority": "P0",
+      "description": "Como desarrollador, quiero logs por bot con niveles info, warning y error, para depurar y trazar problemas rápidamente.",
+      "acceptance_criteria": "Escenario: Logging por bot y nivel\n  Dado que el sistema emite logs estructurados\n  Cuando ocurre un evento info, warning o error\n  Entonces el log incluye bot, nivel, timestamp y mensaje para diagnóstico"
+    },
+    {
+      "number": 40,
+      "title": "Registro de errores de parsing de IA",
+      "epic": "epic_errors_logging",
+      "phase": 1,
+      "priority": "P1",
+      "description": "Como auditor, quiero registrar errores de parsing de respuestas IA y su impacto, para mejorar robustez del parser.",
+      "acceptance_criteria": "Escenario: Registrar errores de parsing de IA\n  Dado que se recibe una respuesta IA no parseable\n  Cuando el parser detecta el error\n  Entonces se registra el incidente y se omite la acción hasta el siguiente ciclo"
+    },
+    {
+      "number": 41,
+      "title": "Disponibilización de métricas diarias por bot",
+      "epic": "epic_metrics_monitoring",
+      "phase": 3,
+      "priority": "P1",
+      "description": "Como analista, quiero disponer de winrate, profit factor, P/L por tipo de orden y costo IA total por día y bot, para evaluar efectividad y eficiencia.",
+      "acceptance_criteria": "Escenario: Disponibilizar métricas diarias por bot\n  Dado que se generaron métricas del día\n  Cuando un analista consulta el resumen\n  Entonces visualiza winrate, profit factor, P/L por tipo y costo IA total"
+    },
+    {
+      "number": 42,
+      "title": "Comparación de desempeño entre metodologías",
+      "epic": "epic_metrics_monitoring",
+      "phase": 3,
+      "priority": "P1",
+      "description": "Como PM, quiero comparar desempeño entre bots numéricos, visuales e híbridos, para decidir continuidad o ajustes de prompts y señales.",
+      "acceptance_criteria": "Escenario: Comparar desempeño entre metodologías\n  Dado que existen métricas para bots numéricos, visuales e híbridos\n  Cuando se consulta el comparativo\n  Entonces se muestran indicadores clave por bot para decisiones de continuidad"
+    },
+    {
+      "number": 43,
+      "title": "Monitoreo de estado y logs de cada bot",
+      "epic": "epic_metrics_monitoring",
+      "phase": 3,
+      "priority": "P1",
+      "description": "Como operador, quiero monitorear logs y estado de cada bot, para detectar caídas o anomalías operativas.",
+      "acceptance_criteria": "Escenario: Monitorear estado y logs de cada bot\n  Dado que cada bot emite health y logs\n  Cuando el operador revisa el estado\n  Entonces puede detectar caídas o anomalías operativas oportunamente"
+    },
+    {
+      "number": 44,
+      "title": "Gestión de credenciales y parámetros en JSON",
+      "epic": "epic_configuration_modularity",
+      "phase": 0,
+      "priority": "P0",
+      "description": "Como administrador, quiero gestionar credenciales, modelos y parámetros en config/*.json, para cambiar proveedores o ajustes sin redeploy de código.",
+      "acceptance_criteria": "Escenario: Gestionar credenciales y parámetros en JSON\n  Dado que existen archivos config/*.json para credenciales y parámetros\n  Cuando se actualiza una credencial o parámetro\n  Entonces el sistema usa el nuevo valor sin redeploy"
+    },
+    {
+      "number": 45,
+      "title": "Reutilización de módulos core",
+      "epic": "epic_configuration_modularity",
+      "phase": 0,
+      "priority": "P0",
+      "description": "Como desarrollador, quiero que los módulos core sean reutilizables por todos los bots, para acelerar implementación y reducir duplicación.",
+      "acceptance_criteria": "Escenario: Reutilización de módulos core\n  Dado que los bots comparten módulos de core\n  Cuando un nuevo bot requiere funcionalidad común\n  Entonces puede integrarla sin duplicar código"
+    },
+    {
+      "number": 46,
+      "title": "Tests unitarios por componente",
+      "epic": "epic_configuration_modularity",
+      "phase": 0,
+      "priority": "P0",
+      "description": "Como QA, quiero tests unitarios por componente y estructura de tests dedicada, para validar calidad de forma aislada.",
+      "acceptance_criteria": "Escenario: Tests unitarios por componente\n  Dado que existe una estructura de tests dedicada\n  Cuando se ejecutan los tests\n  Entonces se validan comportamientos aislados de cada módulo"
+    },
+    {
+      "number": 47,
+      "title": "Almacenamiento seguro de credenciales",
+      "epic": "epic_security_accounts",
+      "phase": 0,
+      "priority": "P0",
+      "description": "Como administrador, quiero almacenar de forma segura las credenciales de MT5 y API Key de Gemini, para operar sin exponer secretos en código.",
+      "acceptance_criteria": "Escenario: Almacenamiento seguro de credenciales\n  Dado que el sistema necesita claves de MT5 y Gemini\n  Cuando se configuran secretos en archivos seguros o variables de entorno\n  Entonces las credenciales no quedan expuestas en el código"
+    },
+    {
+      "number": 48,
+      "title": "Validación de cuota y disponibilidad de modelo IA",
+      "epic": "epic_security_accounts",
+      "phase": 0,
+      "priority": "P1",
+      "description": "Como operador, quiero validar cuota y disponibilidad del modelo antes de iniciar ciclos, para evitar fallos por límites de uso.",
+      "acceptance_criteria": "Escenario: Validar cuota y disponibilidad de modelo IA\n  Dado que se va a iniciar un ciclo que usa IA\n  Cuando se consulta cuota y estado del modelo\n  Entonces el bot procede solo si hay capacidad, de lo contrario espera o aborta"
+    },
+    {
+      "number": 49,
+      "title": "Alternancia de configuraciones de IA por bot",
+      "epic": "epic_security_accounts",
+      "phase": 0,
+      "priority": "P1",
+      "description": "Como PM, quiero poder alternar entre configuraciones de IA por bot, para medir impacto en costo y calidad.",
+      "acceptance_criteria": "Escenario: Alternar configuraciones de IA por bot\n  Dado que cada bot puede usar configuración de IA distinta\n  Cuando el PM cambia el perfil de IA para un bot\n  Entonces el bot aplica el cambio en su siguiente ciclo"
+    },
+    {
+      "number": 50,
+      "title": "Avance por fases con criterios de salida",
+      "epic": "epic_roadmap_quality",
+      "phase": 4,
+      "priority": "P0",
+      "description": "Como PM, quiero avanzar por fases con criterios de salida definidos por entregable, para gestionar riesgo y asegurar integraciones incrementales.",
+      "acceptance_criteria": "Escenario: Avanzar por fases con criterios de salida\n  Dado que el roadmap define fases y entregables\n  Cuando un entregable cumple sus criterios\n  Entonces la fase se da por completada y se inicia la siguiente"
+    },
+    {
+      "number": 51,
+      "title": "Pruebas de integración E2E por bot",
+      "epic": "epic_roadmap_quality",
+      "phase": 4,
+      "priority": "P0",
+      "description": "Como QA, quiero pruebas de integración del Bot 1 y luego de cada bot adicional, para validar extremo a extremo antes de pasar a demo.",
+      "acceptance_criteria": "Escenario: Pruebas de integración E2E por bot\n  Dado que Bot 1 está implementado\n  Cuando se ejecutan pruebas de integración extremo a extremo\n  Entonces se valida la cadena datos→IA→ejecución→persistencia antes de avanzar"
+    },
+    {
+      "number": 52,
+      "title": "Operación en demo antes de real",
+      "epic": "epic_roadmap_quality",
+      "phase": 4,
+      "priority": "P0",
+      "description": "Como operador, quiero ejecutar en demo, monitorear, ajustar prompts y parámetros y solo luego migrar a real, para minimizar riesgo financiero.",
+      "acceptance_criteria": "Escenario: Operar en demo antes de real\n  Dado que existe entorno de demo y de real\n  Cuando el operador valida desempeño y ajusta prompts/parámetros en demo\n  Entonces recién se migra a real para minimizar riesgo financiero"
+    }
+  ]
+}
