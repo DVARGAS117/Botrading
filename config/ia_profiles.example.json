@@ -1,0 +1,182 @@
+{
+    "ia_profiles": {
+        "_comment": "Configuración de perfiles de IA alternantes por bot",
+        "_description": "Permite configurar múltiples perfiles de IA (Gemini, OpenAI, Anthropic) y asignarlos dinámicamente a bots para comparar rendimiento y costos",
+        "default_profile": "gemini-pro",
+        "profiles": {
+            "gemini-pro": {
+                "_description": "Google Gemini 1.5 Pro - Modelo multimodal de alta capacidad",
+                "provider": "gemini",
+                "model": "gemini-1.5-pro",
+                "temperature": 0.7,
+                "max_tokens": 2048,
+                "top_p": 0.9,
+                "frequency_penalty": 0.0,
+                "presence_penalty": 0.0,
+                "cost_per_1k_tokens": 0.005,
+                "quota_limits": {
+                    "requests_per_minute": 60,
+                    "requests_per_day": 1500,
+                    "tokens_per_minute": 32000,
+                    "tokens_per_day": 500000
+                },
+                "fallback_profile": "gemini-flash"
+            },
+            "gemini-flash": {
+                "_description": "Google Gemini 1.5 Flash - Modelo rápido y eficiente",
+                "provider": "gemini",
+                "model": "gemini-1.5-flash",
+                "temperature": 0.7,
+                "max_tokens": 1024,
+                "top_p": 0.9,
+                "frequency_penalty": 0.0,
+                "presence_penalty": 0.0,
+                "cost_per_1k_tokens": 0.002,
+                "quota_limits": {
+                    "requests_per_minute": 100,
+                    "requests_per_day": 2000,
+                    "tokens_per_minute": 50000,
+                    "tokens_per_day": 1000000
+                },
+                "fallback_profile": null
+            },
+            "gpt-4-turbo": {
+                "_description": "OpenAI GPT-4 Turbo - Modelo de alta precisión",
+                "provider": "openai",
+                "model": "gpt-4-turbo-preview",
+                "temperature": 0.5,
+                "max_tokens": 4096,
+                "top_p": 0.95,
+                "frequency_penalty": 0.1,
+                "presence_penalty": 0.1,
+                "cost_per_1k_tokens": 0.03,
+                "quota_limits": {
+                    "requests_per_minute": 30,
+                    "requests_per_day": 500,
+                    "tokens_per_minute": 150000,
+                    "tokens_per_day": 3000000
+                },
+                "fallback_profile": "gpt-35-turbo"
+            },
+            "gpt-35-turbo": {
+                "_description": "OpenAI GPT-3.5 Turbo - Modelo rápido y económico",
+                "provider": "openai",
+                "model": "gpt-3.5-turbo",
+                "temperature": 0.7,
+                "max_tokens": 2048,
+                "top_p": 0.9,
+                "frequency_penalty": 0.0,
+                "presence_penalty": 0.0,
+                "cost_per_1k_tokens": 0.002,
+                "quota_limits": {
+                    "requests_per_minute": 60,
+                    "requests_per_day": 1000,
+                    "tokens_per_minute": 90000,
+                    "tokens_per_day": 2000000
+                },
+                "fallback_profile": null
+            },
+            "claude-3-opus": {
+                "_description": "Anthropic Claude 3 Opus - Máxima inteligencia",
+                "provider": "anthropic",
+                "model": "claude-3-opus-20240229",
+                "temperature": 0.7,
+                "max_tokens": 4096,
+                "top_p": 0.9,
+                "frequency_penalty": 0.0,
+                "presence_penalty": 0.0,
+                "cost_per_1k_tokens": 0.075,
+                "quota_limits": {
+                    "requests_per_minute": 20,
+                    "requests_per_day": 300,
+                    "tokens_per_minute": 80000,
+                    "tokens_per_day": 1500000
+                },
+                "fallback_profile": "claude-3-sonnet"
+            },
+            "claude-3-sonnet": {
+                "_description": "Anthropic Claude 3 Sonnet - Balance rendimiento/costo",
+                "provider": "anthropic",
+                "model": "claude-3-sonnet-20240229",
+                "temperature": 0.7,
+                "max_tokens": 2048,
+                "top_p": 0.9,
+                "frequency_penalty": 0.0,
+                "presence_penalty": 0.0,
+                "cost_per_1k_tokens": 0.015,
+                "quota_limits": {
+                    "requests_per_minute": 40,
+                    "requests_per_day": 500,
+                    "tokens_per_minute": 100000,
+                    "tokens_per_day": 2000000
+                },
+                "fallback_profile": null
+            }
+        },
+        "bot_assignments": {
+            "_comment": "Asignación de perfiles a bots específicos",
+            "_description": "Permite que cada bot use un perfil diferente para comparar resultados",
+            "bot_1_numerico": "gemini-pro",
+            "bot_1_visual": "gemini-flash",
+            "bot_2_numerico": "gpt-4-turbo",
+            "bot_2_visual": "gpt-35-turbo",
+            "bot_3_experimental": "claude-3-opus"
+        },
+        "comparison_settings": {
+            "_comment": "Configuración para comparación de rendimiento entre perfiles",
+            "track_costs": true,
+            "track_latency": true,
+            "track_quality_metrics": true,
+            "export_comparison_reports": true,
+            "report_frequency_hours": 24
+        },
+        "auto_fallback_settings": {
+            "_comment": "Configuración de fallback automático por cuota excedida",
+            "enabled": true,
+            "max_fallback_attempts": 2,
+            "wait_before_retry_seconds": 300,
+            "notify_on_fallback": true
+        }
+    },
+    "_usage_examples": {
+        "_comment": "Ejemplos de uso del IAConfigManager",
+        "example_1_basic_usage": {
+            "description": "Uso básico - obtener perfil para bot",
+            "code": "manager = IAConfigManager(config); profile = manager.get_profile_for_bot('bot_1_numerico')"
+        },
+        "example_2_switch_profile": {
+            "description": "Cambiar perfil de un bot dinámicamente",
+            "code": "manager.switch_profile('bot_1_numerico', 'gpt-4-turbo')"
+        },
+        "example_3_validate_quota": {
+            "description": "Validar cuota antes de usar perfil",
+            "code": "profile = manager.get_profile_for_bot('bot_1', validate_quota=True, auto_fallback=True)"
+        },
+        "example_4_track_costs": {
+            "description": "Registrar uso y calcular costos",
+            "code": "manager.track_usage('bot_1', 'gemini-pro', tokens_used=1500); stats = manager.get_usage_stats('bot_1')"
+        },
+        "example_5_compare_bots": {
+            "description": "Comparar costos entre bots",
+            "code": "comparison = manager.get_cost_comparison(['bot_1', 'bot_2', 'bot_3'])"
+        }
+    },
+    "_cost_comparison_table": {
+        "_comment": "Tabla comparativa de costos por 1M de tokens (referencia)",
+        "gemini-pro": "$5.00",
+        "gemini-flash": "$2.00",
+        "gpt-4-turbo": "$30.00",
+        "gpt-35-turbo": "$2.00",
+        "claude-3-opus": "$75.00",
+        "claude-3-sonnet": "$15.00"
+    },
+    "_best_use_cases": {
+        "_comment": "Casos de uso recomendados por perfil",
+        "gemini-pro": "Análisis técnico complejo, decisiones críticas con mucho contexto",
+        "gemini-flash": "Análisis rápidos, decisiones simples, validaciones frecuentes",
+        "gpt-4-turbo": "Razonamiento profundo, estrategias complejas, backtesting",
+        "gpt-35-turbo": "Consultas rápidas, análisis básicos, bajo presupuesto",
+        "claude-3-opus": "Máxima precisión, decisiones de alto riesgo, análisis crítico",
+        "claude-3-sonnet": "Balance calidad/precio, uso general, producción"
+    }
+}

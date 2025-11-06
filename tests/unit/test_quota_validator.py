@@ -447,8 +447,8 @@ class TestQuotaStatistics:
         # El método calcula hasta el próximo minuto
         time_to_reset = quota_validator.estimate_time_to_quota_reset()
         
-        # Debe ser entre 1 y 60 segundos
-        assert 1 <= time_to_reset <= 60
+        # Debe ser entre 0 y 60 segundos (0 si estamos exactamente al inicio del minuto)
+        assert 0 <= time_to_reset <= 60
 
 
 # ==================== TESTS DE VALIDACIÓN COMPLETA ====================
