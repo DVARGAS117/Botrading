@@ -2,7 +2,7 @@
 
 > Sistema de trading automatizado con múltiples bots orquestadores, integración MT5 y decisiones impulsadas por IA Gemini
 
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-135%20passing-brightgreen)]()
 [![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.13+-blue)]()
 [![License](https://img.shields.io/badge/license-Private-red)]()
@@ -12,7 +12,7 @@
 ## 📋 Estado del Proyecto
 
 **Fase Actual:** Fase 0 - Fundamentos  
-**Último Ticket Completado:** T47 - Almacenamiento seguro de credenciales ✅  
+**Último Ticket Completado:** T35 - Validación hora Lima y días hábiles ✅  
 **Fecha:** 6 de Noviembre de 2025
 
 ---
@@ -40,6 +40,7 @@ BOTRADING/
 │   │   ├── config_loader.py      # ✅ Gestión de configuración
 │   │   ├── credential_manager.py # ✅ Gestión segura credenciales
 │   │   ├── logger.py             # ✅ Sistema de logging
+│   │   ├── time_validator.py     # ✅ Validación horarios Lima
 │   │   ├── mt5_connector.py      # 🔜 Conexión MT5
 │   │   ├── ia_agent.py           # 🔜 Agente IA Gemini
 │   │   └── risk_manager.py       # 🔜 Gestión de riesgo
@@ -53,13 +54,15 @@ BOTRADING/
 ├── config/                       # Archivos de configuración
 │   ├── settings.example.json     # Configuración general
 │   ├── credentials.example.json  # Credenciales
+│   ├── schedule.example.json     # ✅ Horarios de trading
 │   └── ia_config.example.json    # Configuración IA
 ├── tests/                        # Tests
 │   ├── unit/                     # Tests unitarios
 │   │   ├── test_core_module.py   # ✅ Tests clase base
 │   │   ├── test_config_loader.py # ✅ Tests configuración
 │   │   ├── test_credential_manager.py # ✅ Tests credenciales
-│   │   └── test_logger.py        # ✅ Tests logging
+│   │   ├── test_logger.py        # ✅ Tests logging
+│   │   └── test_time_validator.py # ✅ Tests validador tiempo
 │   ├── integration/              # ✅ Tests de integración
 │   │   └── test_core_integration.py # ✅ Tests integración
 │   └── e2e/                      # 🔜 Tests end-to-end
@@ -69,7 +72,8 @@ BOTRADING/
 │   │   ├── T46_tests_unitarios_por_componente.md  # ✅ Doc testing
 │   │   ├── T47_almacenamiento_seguro_credenciales.md  # ✅ Doc seguridad
 │   │   ├── T44_config_loader.md  # ✅ Doc config_loader
-│   │   └── T39_logger.md         # ✅ Doc logger
+│   │   ├── T39_logger.md         # ✅ Doc logger
+│   │   └── T35_validacion_hora_lima.md  # ✅ Doc validador tiempo
 │   ├── agents.md                 # Reglas del agente
 │   ├── RESUMEN_EJECUTIVO.md      # Resumen del proyecto
 │   └── TICKETS_LIST.md           # Lista de tickets
@@ -116,11 +120,13 @@ pip install -r requirements.txt
 # Copiar archivos de ejemplo
 cp config/settings.example.json config/settings.json
 cp config/credentials.example.json config/credentials.json
+cp config/schedule.example.json config/schedule.json
 cp config/ia_config.example.json config/ia_config.json
 cp .env.example .env
 
 # Editar con tus credenciales reales
 notepad config/credentials.json
+notepad config/schedule.json
 notepad .env
 ```
 
@@ -142,7 +148,7 @@ pytest tests/ -v --cov=src
 | T45 | Reutilización de módulos core | ✅ | 98% |
 | T46 | Tests unitarios por componente | ✅ | 93% |
 | T47 | Almacenamiento seguro de credenciales | ✅ | 86% |
-| T35 | Validación de hora local de Lima y días hábiles | 🔜 | - |
+| T35 | Validación de hora local de Lima y días hábiles | ✅ | 100% |
 | T37 | Espera por cierre de vela antes de extraer datos | 🔜 | - |
 
 ---
@@ -181,6 +187,7 @@ pytest tests/unit/test_config_loader.py -v
 - **[T45 - Arquitectura Core](context/DOCUMENTACION/T45_reusabilidad_modulos_core.md)** - Patrones de reutilización
 - **[T44 - Config Loader](context/DOCUMENTACION/T44_config_loader.md)** - Gestión de configuración
 - **[T39 - Logger](context/DOCUMENTACION/T39_logger.md)** - Sistema de logging
+- **[T35 - Time Validator](context/DOCUMENTACION/T35_validacion_hora_lima.md)** - Validación de horarios
 
 ---
 
@@ -226,7 +233,7 @@ pytest tests/unit/test_config_loader.py -v
 - [x] T45 - Módulos core reutilizables
 - [x] T46 - Tests unitarios
 - [x] T47 - Almacenamiento seguro
-- [ ] T35 - Validación horarios
+- [x] T35 - Validación horarios
 - [ ] T37 - Espera cierre de vela
 
 ### Fase 1: Núcleo (Próximamente)
