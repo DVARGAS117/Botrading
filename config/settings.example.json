@@ -1,0 +1,30 @@
+{
+  "timezone": "America/Lima",
+  "trading_window": {
+    "start": "06:00",
+    "end": "13:00",
+    "days": ["MON", "TUE", "WED", "THU", "FRI"]
+  },
+  "bots": {
+    "bot_1": {
+      "type": "numeric",
+      "instruments": ["EURUSD", "GBPUSD"],
+      "timeframes": ["5M", "15M", "1H"],
+      "enabled": true
+    },
+    "bot_2": {
+      "type": "visual",
+      "instruments": ["EURUSD", "USDJPY"],
+      "timeframes": ["5M", "15M", "1H"],
+      "enabled": false
+    }
+  },
+  "risk": {
+    "default_risk_percent": 1.0,
+    "max_risk_percent": 2.0
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/botrading.log"
+  }
+}
