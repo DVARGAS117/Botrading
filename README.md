@@ -2,9 +2,9 @@
 
 > Sistema de trading automatizado con múltiples bots orquestadores, integración MT5 y decisiones impulsadas por IA Gemini
 
-[![Tests](https://img.shields.io/badge/tests-167%20passing-brightgreen)]()
-[![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)]()
-[![Python](https://img.shields.io/badge/python-3.12+-blue)]()
+[![Tests](https://img.shields.io/badge/tests-174%20passing-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)]()
+[![Python](https://img.shields.io/badge/python-3.13+-blue)]()
 [![License](https://img.shields.io/badge/license-Private-red)]()
 
 ---
@@ -12,7 +12,7 @@
 ## 📋 Estado del Proyecto
 
 **Fase Actual:** Fase 0 - Fundamentos  
-**Último Ticket Completado:** T37 - Espera de cierre de vela ✅  
+**Último Ticket Completado:** T48 - Validación de cuota IA ✅  
 **Fecha:** 6 de Noviembre de 2025
 
 ---
@@ -42,6 +42,7 @@ BOTRADING/
 │   │   ├── logger.py             # ✅ Sistema de logging
 │   │   ├── time_validator.py     # ✅ Validación horarios Lima
 │   │   ├── candle_waiter.py      # ✅ Espera cierre de vela
+│   │   ├── quota_validator.py    # ✅ Validación cuota IA
 │   │   ├── mt5_connector.py      # 🔜 Conexión MT5
 │   │   ├── ia_agent.py           # 🔜 Agente IA Gemini
 │   │   └── risk_manager.py       # 🔜 Gestión de riesgo
@@ -57,6 +58,7 @@ BOTRADING/
 │   ├── credentials.example.json  # Credenciales
 │   ├── schedule.example.json     # ✅ Horarios de trading
 │   ├── candle_wait.example.json  # ✅ Config espera de velas
+│   ├── quota_validation.example.json # ✅ Config validación cuota IA
 │   └── ia_config.example.json    # Configuración IA
 ├── tests/                        # Tests
 │   ├── unit/                     # Tests unitarios
@@ -65,7 +67,8 @@ BOTRADING/
 │   │   ├── test_credential_manager.py # ✅ Tests credenciales
 │   │   ├── test_logger.py        # ✅ Tests logging
 │   │   ├── test_time_validator.py # ✅ Tests validador tiempo
-│   │   └── test_candle_waiter.py # ✅ Tests espera de velas
+│   │   ├── test_candle_waiter.py # ✅ Tests espera de velas
+│   │   └── test_quota_validator.py # ✅ Tests validación cuota IA
 │   ├── integration/              # ✅ Tests de integración
 │   │   └── test_core_integration.py # ✅ Tests integración
 │   └── e2e/                      # 🔜 Tests end-to-end
@@ -77,7 +80,8 @@ BOTRADING/
 │   │   ├── T44_config_loader.md  # ✅ Doc config_loader
 │   │   ├── T39_logger.md         # ✅ Doc logger
 │   │   ├── T35_validacion_hora_lima.md  # ✅ Doc validador tiempo
-│   │   └── T37_espera_cierre_vela.md  # ✅ Doc espera de velas
+│   │   ├── T37_espera_cierre_vela.md  # ✅ Doc espera de velas
+│   │   └── T48_validacion_cuota_ia.md  # ✅ Doc validación cuota IA
 │   ├── agents.md                 # Reglas del agente
 │   ├── RESUMEN_EJECUTIVO.md      # Resumen del proyecto
 │   └── TICKETS_LIST.md           # Lista de tickets
@@ -126,6 +130,7 @@ cp config/settings.example.json config/settings.json
 cp config/credentials.example.json config/credentials.json
 cp config/schedule.example.json config/schedule.json
 cp config/candle_wait.example.json config/candle_wait.json
+cp config/quota_validation.example.json config/quota_validation.json
 cp config/ia_config.example.json config/ia_config.json
 cp .env.example .env
 
@@ -133,6 +138,7 @@ cp .env.example .env
 notepad config/credentials.json
 notepad config/schedule.json
 notepad config/candle_wait.json
+notepad config/quota_validation.json
 notepad .env
 ```
 
@@ -155,7 +161,8 @@ pytest tests/ -v --cov=src
 | T46 | Tests unitarios por componente | ✅ | 93% |
 | T47 | Almacenamiento seguro de credenciales | ✅ | 86% |
 | T35 | Validación de hora local de Lima y días hábiles | ✅ | 100% |
-| T37 | Espera por cierre de vela antes de extraer datos | ✅ | >90% |
+| T37 | Espera por cierre de vela antes de extraer datos | ✅ | 90% |
+| T48 | Validación de cuota y disponibilidad de modelo IA | ✅ | 87% |
 
 ---
 
@@ -195,6 +202,7 @@ pytest tests/unit/test_config_loader.py -v
 - **[T39 - Logger](context/DOCUMENTACION/T39_logger.md)** - Sistema de logging
 - **[T35 - Time Validator](context/DOCUMENTACION/T35_validacion_hora_lima.md)** - Validación de horarios
 - **[T37 - Candle Waiter](context/DOCUMENTACION/T37_espera_cierre_vela.md)** - Espera de cierre de velas
+- **[T48 - Quota Validator](context/DOCUMENTACION/T48_validacion_cuota_ia.md)** - Validación de cuota IA
 
 ---
 
@@ -242,8 +250,8 @@ pytest tests/unit/test_config_loader.py -v
 - [x] T47 - Almacenamiento seguro
 - [x] T35 - Validación horarios
 - [x] T37 - Espera cierre de vela
+- [x] T48 - Validación cuota IA
 - [ ] T36 - Filtros vía configuración
-- [ ] T48 - Validación cuota IA
 - [ ] T49 - Configuración alternante IA
 
 ### Fase 1: Núcleo (Próximamente)
@@ -319,10 +327,10 @@ Este proyecto es privado. Todos los derechos reservados.
 |---------|-------|
 | Tickets Totales | 52 |
 | Épicas | 16 |
-| Tickets Completados | 7 |
-| Tests | 167 |
-| Cobertura | 92% |
-| Líneas de Código | ~2,500 |
+| Tickets Completados | 8 |
+| Tests | 174 |
+| Cobertura | 90% |
+| Líneas de Código | ~3,000 |
 
 ---
 
