@@ -3,7 +3,7 @@
 > Sistema de trading automatizado con múltiples bots orquestadores, integración MT5 y decisiones impulsadas por IA Gemini
 
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
-[![Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.13+-blue)]()
 [![License](https://img.shields.io/badge/license-Private-red)]()
 
@@ -12,7 +12,7 @@
 ## 📋 Estado del Proyecto
 
 **Fase Actual:** Fase 0 - Fundamentos  
-**Último Ticket Completado:** T45 - Reutilización de módulos core ✅  
+**Último Ticket Completado:** T47 - Almacenamiento seguro de credenciales ✅  
 **Fecha:** 6 de Noviembre de 2025
 
 ---
@@ -38,6 +38,7 @@ BOTRADING/
 │   ├── core/                     # Módulos reutilizables
 │   │   ├── core_module.py        # ✅ Clase base módulos core
 │   │   ├── config_loader.py      # ✅ Gestión de configuración
+│   │   ├── credential_manager.py # ✅ Gestión segura credenciales
 │   │   ├── logger.py             # ✅ Sistema de logging
 │   │   ├── mt5_connector.py      # 🔜 Conexión MT5
 │   │   ├── ia_agent.py           # 🔜 Agente IA Gemini
@@ -57,12 +58,16 @@ BOTRADING/
 │   ├── unit/                     # Tests unitarios
 │   │   ├── test_core_module.py   # ✅ Tests clase base
 │   │   ├── test_config_loader.py # ✅ Tests configuración
+│   │   ├── test_credential_manager.py # ✅ Tests credenciales
 │   │   └── test_logger.py        # ✅ Tests logging
-│   ├── integration/              # 🔜 Tests de integración
+│   ├── integration/              # ✅ Tests de integración
+│   │   └── test_core_integration.py # ✅ Tests integración
 │   └── e2e/                      # 🔜 Tests end-to-end
 ├── context/                      # Documentación
 │   ├── DOCUMENTACION/            # Documentación técnica
 │   │   ├── T45_reusabilidad_modulos_core.md  # ✅ Doc arquitectura
+│   │   ├── T46_tests_unitarios_por_componente.md  # ✅ Doc testing
+│   │   ├── T47_almacenamiento_seguro_credenciales.md  # ✅ Doc seguridad
 │   │   ├── T44_config_loader.md  # ✅ Doc config_loader
 │   │   └── T39_logger.md         # ✅ Doc logger
 │   ├── agents.md                 # Reglas del agente
@@ -132,11 +137,11 @@ pytest tests/ -v --cov=src
 
 | # | Ticket | Estado | Cobertura |
 |---|--------|--------|-----------|
-| T44 | Gestión de credenciales y parámetros en JSON | ✅ | 94% |
+| T44 | Gestión de credenciales y parámetros en JSON | ✅ | 98% |
 | T39 | Logging por bot y nivel | ✅ | 85% |
 | T45 | Reutilización de módulos core | ✅ | 98% |
-| T46 | Tests unitarios por componente | 🔜 | - |
-| T47 | Almacenamiento seguro de credenciales | 🔜 | - |
+| T46 | Tests unitarios por componente | ✅ | 93% |
+| T47 | Almacenamiento seguro de credenciales | ✅ | 86% |
 | T35 | Validación de hora local de Lima y días hábiles | 🔜 | - |
 | T37 | Espera por cierre de vela antes de extraer datos | 🔜 | - |
 
@@ -171,6 +176,8 @@ pytest tests/unit/test_config_loader.py -v
 - **[Resumen Ejecutivo](context/RESUMEN_EJECUTIVO.md)** - Visión general del proyecto
 - **[Lista de Tickets](context/TICKETS_LIST.md)** - 52 tickets en 16 épicas
 - **[Reglas del Agente](context/agents.md)** - Metodología TDD y estándares
+- **[T47 - Credential Manager](context/DOCUMENTACION/T47_almacenamiento_seguro_credenciales.md)** - Almacenamiento seguro
+- **[T46 - Testing Infrastructure](context/DOCUMENTACION/T46_tests_unitarios_por_componente.md)** - Infraestructura de testing
 - **[T45 - Arquitectura Core](context/DOCUMENTACION/T45_reusabilidad_modulos_core.md)** - Patrones de reutilización
 - **[T44 - Config Loader](context/DOCUMENTACION/T44_config_loader.md)** - Gestión de configuración
 - **[T39 - Logger](context/DOCUMENTACION/T39_logger.md)** - Sistema de logging
@@ -181,6 +188,7 @@ pytest tests/unit/test_config_loader.py -v
 
 - **Python 3.13** - Lenguaje principal
 - **pytest** - Framework de testing
+- **cryptography** - Encriptación de credenciales (Fernet/AES-128)
 - **pydantic** - Validación de datos
 - **python-dotenv** - Variables de entorno
 - **MetaTrader 5** - Plataforma de trading (próximamente)
@@ -191,15 +199,19 @@ pytest tests/unit/test_config_loader.py -v
 
 ## 🔒 Seguridad
 
+- ✅ Encriptación AES-128 para credenciales (Fernet)
 - ✅ Credenciales nunca en código fuente
 - ✅ Archivos sensibles en `.gitignore`
 - ✅ Logging seguro sin exponer secretos
-- ✅ Variables de entorno para configuración sensible
+- ✅ Variables de entorno para claves de encriptación
+- ✅ Permisos restrictivos en archivos (Unix 0o600)
 - ✅ Archivos `.example` para documentación
 
 **Archivos a NO commitear:**
-- `config/credentials.json`
+- `config/credentials.enc` (encriptado, pero mejor excluir)
+- `config/credentials.json` (texto plano, NUNCA commitear)
 - `config/settings.json`
+- `config/encryption_key.txt`
 - `.env`
 - `*.log`
 - `*.db`
@@ -212,8 +224,8 @@ pytest tests/unit/test_config_loader.py -v
 - [x] T44 - Gestión de credenciales
 - [x] T39 - Sistema de logging
 - [x] T45 - Módulos core reutilizables
-- [ ] T46 - Tests unitarios
-- [ ] T47 - Almacenamiento seguro
+- [x] T46 - Tests unitarios
+- [x] T47 - Almacenamiento seguro
 - [ ] T35 - Validación horarios
 - [ ] T37 - Espera cierre de vela
 
@@ -290,10 +302,10 @@ Este proyecto es privado. Todos los derechos reservados.
 |---------|-------|
 | Tickets Totales | 52 |
 | Épicas | 16 |
-| Tickets Completados | 3 |
-| Tests | 47 |
-| Cobertura | 92% |
-| Líneas de Código | ~900 |
+| Tickets Completados | 5 |
+| Tests | 102 |
+| Cobertura | 90% |
+| Líneas de Código | ~1,200 |
 
 ---
 
