@@ -1,0 +1,89 @@
+{
+  "_comment": "Configuración de activos para AssetIterator - T22",
+  "_description": "Define los activos (instrumentos) que serán procesados por los bots de trading",
+  "_usage": "Copiar a config/assets.json y ajustar según necesidades",
+  
+  "assets": [
+    {
+      "symbol": "EURUSD",
+      "enabled": true,
+      "timeframes": ["5M", "15M", "1H"],
+      "lot_size": 0.01,
+      "max_positions": 3,
+      "_description": "Euro vs US Dollar - Major pair, alta liquidez"
+    },
+    {
+      "symbol": "GBPUSD",
+      "enabled": true,
+      "timeframes": ["5M", "15M", "1H"],
+      "lot_size": 0.01,
+      "max_positions": 2,
+      "_description": "British Pound vs US Dollar - Major pair, alta volatilidad"
+    },
+    {
+      "symbol": "USDJPY",
+      "enabled": true,
+      "timeframes": ["5M", "15M", "1H"],
+      "lot_size": 0.01,
+      "max_positions": 2,
+      "_description": "US Dollar vs Japanese Yen - Major pair"
+    },
+    {
+      "symbol": "AUDUSD",
+      "enabled": false,
+      "timeframes": ["15M", "1H"],
+      "lot_size": 0.01,
+      "max_positions": 1,
+      "_description": "Australian Dollar vs US Dollar - Commodity currency"
+    },
+    {
+      "symbol": "USDCAD",
+      "enabled": false,
+      "timeframes": ["15M", "1H"],
+      "lot_size": 0.01,
+      "max_positions": 1,
+      "_description": "US Dollar vs Canadian Dollar - Commodity currency"
+    },
+    {
+      "symbol": "NZDUSD",
+      "enabled": false,
+      "timeframes": ["15M", "1H"],
+      "lot_size": 0.01,
+      "max_positions": 1,
+      "_description": "New Zealand Dollar vs US Dollar"
+    },
+    {
+      "symbol": "EURGBP",
+      "enabled": false,
+      "timeframes": ["15M", "1H"],
+      "lot_size": 0.01,
+      "max_positions": 1,
+      "_description": "Euro vs British Pound - Cross pair"
+    },
+    {
+      "symbol": "EURJPY",
+      "enabled": false,
+      "timeframes": ["15M", "1H"],
+      "lot_size": 0.01,
+      "max_positions": 1,
+      "_description": "Euro vs Japanese Yen - Cross pair"
+    },
+    {
+      "symbol": "XAUUSD",
+      "enabled": false,
+      "timeframes": ["5M", "15M", "1H"],
+      "lot_size": 0.01,
+      "max_positions": 1,
+      "_description": "Gold vs US Dollar - Safe haven asset"
+    }
+  ],
+  
+  "_notes": [
+    "enabled: true/false - Activa o desactiva el activo sin eliminarlo",
+    "symbol: String - Símbolo del instrumento (debe coincidir con MT5)",
+    "timeframes: Array - Timeframes a analizar (5M, 15M, 1H, 4H, 1D)",
+    "lot_size: Float - Tamaño de lote por defecto",
+    "max_positions: Int - Máximo de posiciones simultáneas para este activo",
+    "El orden de los activos en este array define el orden de procesamiento (determinista)"
+  ]
+}
