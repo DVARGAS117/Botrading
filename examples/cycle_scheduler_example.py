@@ -1,12 +1,15 @@
 """
-Ejemplos de uso del CycleScheduler - T01
+Ejemplos de uso del CycleScheduler - T01 y T02
 
 Este script demuestra cómo usar el CycleScheduler para ejecutar ciclos de trading
 exactamente al inicio de cada hora dentro de la ventana de trading 06:00-13:00 Lima.
 
+T01: Ejecución de ciclo por bot a inicio de hora
+T02: Aplicación de filtros de horario y días hábiles con logging
+
 Autor: Sistema Botrading
-Fecha: 2025-11-06
-Ticket: T01 - Ejecución de ciclo por bot a inicio de hora
+Fecha: 2025-11-11
+Tickets: T01, T02
 """
 
 from src.core.cycle_scheduler import CycleScheduler
@@ -388,13 +391,88 @@ def ejemplo_8_calculo_tiempo():
 
 
 # =============================================================================
+# EJEMPLO 9: LOGGING DE RECHAZOS (T02)
+# =============================================================================
+
+def ejemplo_9_logging_rechazos():
+    """
+    Ejemplo de logging automático cuando filtros rechazan ciclos (T02).
+    
+    NUEVO EN T02:
+    - CycleScheduler ahora acepta parámetros 'logger' y 'bot_name'
+    - Registra automáticamente cuando los filtros de horario/días no se cumplen
+    - Permite debugging, auditoría y monitoreo en producción
+    """
+    print("\n" + "="*70)
+    print("EJEMPLO 9: Logging de Rechazos (T02)")
+    print("="*70)
+    
+    time_validator = TimeValidator()
+    config = {"cycle_scheduler": {"enabled": True}}
+    
+    # Crear logger específico para el bot
+    bot_logger = logging.getLogger("EURUSD_Bot_1")
+    bot_logger.setLevel(logging.INFO)
+    
+    # Agregar handler para capturar logs en consola
+    if not bot_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        )
+        bot_logger.addHandler(handler)
+    
+    # Crear scheduler con logger personalizado (NUEVO EN T02)
+    scheduler = CycleScheduler(
+        time_validator,
+        config,
+        logger=bot_logger,          # ← PARÁMETRO NUEVO EN T02
+        bot_name="EURUSD_Bot_1"     # ← PARÁMETRO NUEVO EN T02
+    )
+    
+    print("\n🔍 El scheduler ahora registrará rechazos de filtros:")
+    print()
+    print("  Escenarios que generan logs:")
+    print("    • Fuera de horario (antes de 06:00 o después de 13:00 Lima)")
+    print("    • Fin de semana (Sábado/Domingo)")
+    print("    • Feriados peruanos")
+    print("    • Buffer de IA (últimos 3 minutos de la hora)")
+    print()
+    print("  Ejemplo de mensaje de log:")
+    print("    [2025-11-11 14:00:00] INFO - EURUSD_Bot_1")
+    print("    [EURUSD_Bot_1] Cycle rejected by time filter:")
+    print("    Outside trading hours (06:00-13:00 Lima)")
+    print()
+    print("  Beneficios:")
+    print("    ✅ Auditabilidad completa de decisiones del scheduler")
+    print("    ✅ Debugging facilitado (saber POR QUÉ no ejecutó)")
+    print("    ✅ Monitoreo en producción (detectar problemas)")
+    print("    ✅ Trazabilidad para compliance y reportes")
+    
+    # Obtener estado
+    status = scheduler.get_scheduler_status()
+    print(f"\n📊 Estado actual del scheduler:")
+    print(f"  Scheduler habilitado: {status['scheduler_enabled']}")
+    print(f"  Horario válido: {status['is_trading_time_valid']}")
+    if status['trading_time_reason']:
+        print(f"  Razón de rechazo: {status['trading_time_reason']}")
+    print(f"  Bot name: {scheduler.bot_name}")
+    print(f"  Logger: {scheduler.logger.name}")
+    
+    # Simular verificación (si no es horario válido, SE REGISTRARÁ EN LOGS)
+    if not status['is_trading_time_valid']:
+        print("\n⚠️  Como estamos fuera de horario, should_start_cycle()")
+        print("    registrará el rechazo en los logs automáticamente.")
+
+
+# =============================================================================
 # FUNCIÓN PRINCIPAL
 # =============================================================================
 
 def main():
     """Ejecutar todos los ejemplos"""
     print("\n" + "="*70)
-    print(" EJEMPLOS DE USO: CycleScheduler (T01)")
+    print(" EJEMPLOS DE USO: CycleScheduler (T01 y T02)")
     print("="*70)
     
     ejemplo_1_uso_basico()
@@ -405,6 +483,7 @@ def main():
     ejemplo_6_integracion_negocio()
     ejemplo_7_scheduler_deshabilitado()
     ejemplo_8_calculo_tiempo()
+    ejemplo_9_logging_rechazos()  # ← NUEVO T02
     
     print("\n" + "="*70)
     print(" FIN DE LOS EJEMPLOS")
@@ -414,6 +493,10 @@ def main():
     print("   En producción, scheduler.run_cycle(callback) bloqueará")
     print("   hasta que sea el momento correcto de ejecutar el ciclo.")
     print("   Los ejemplos anteriores solo muestran configuración.\n")
+    print("📝 NUEVO EN T02:")
+    print("   El scheduler ahora registra en logs cuando los filtros")
+    print("   de horario y días hábiles no se cumplen, facilitando")
+    print("   debugging y auditoría del sistema.\n")
 
 
 if __name__ == "__main__":
