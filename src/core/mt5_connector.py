@@ -404,6 +404,61 @@ class MT5Connector:
         
         return account
     
+    @require_connection
+    def get_symbol_info(self, symbol: str) -> Any:
+        """
+        Obtiene información completa de un símbolo.
+        
+        Args:
+            symbol: Nombre del símbolo (ej: "EURUSD", "XAUUSD")
+        
+        Returns:
+            Objeto con información del símbolo incluyendo:
+            - volume_min: Volumen mínimo para operar
+            - volume_max: Volumen máximo para operar
+            - volume_step: Incremento de volumen
+            - point: Tamaño del punto
+            - tick_size: Tamaño del tick
+            - tick_value: Valor del tick
+            - contract_size: Tamaño del contrato
+            - trade_contract_size: Tamaño del contrato de trading
+            Y muchos otros campos
+        
+        Raises:
+            MT5ConnectionError: Si no hay conexión activa
+            ValueError: Si el símbolo no existe o no está disponible
+        
+        Example:
+            >>> info = connector.get_symbol_info("EURUSD")
+            >>> print(f"Min lot: {info.volume_min}")
+            >>> print(f"Max lot: {info.volume_max}")
+            >>> print(f"Step: {info.volume_step}")
+        """
+        if not symbol or not symbol.strip():
+            raise ValueError("Symbol name cannot be empty")
+        
+        symbol_info = self._mt5.symbol_info(symbol)
+        
+        if symbol_info is None:
+            # Intentar seleccionar el símbolo primero
+            selected = self._mt5.symbol_select(symbol, True)
+            if selected:
+                symbol_info = self._mt5.symbol_info(symbol)
+            
+            if symbol_info is None:
+                raise ValueError(
+                    f"Symbol '{symbol}' not found or not available. "
+                    f"Check symbol name and broker availability."
+                )
+        
+        self.logger.debug(
+            f"Retrieved symbol info for {symbol}: "
+            f"min={symbol_info.volume_min}, max={symbol_info.volume_max}, "
+            f"step={symbol_info.volume_step}"
+        )
+        
+        return symbol_info
+    
     # ==================== CONTEXT MANAGER ====================
     
     def __enter__(self):
