@@ -1,12 +1,17 @@
 """
 CycleScheduler - T1: Ejecución de ciclo por bot a inicio de hora
+T2: Aplicación de filtros de horario y días hábiles
 
 Este módulo implementa el scheduler que ejecuta ciclos de trading exactamente
 al inicio de cada hora dentro de la ventana de trading 06:00-13:00 Lima,
 con un ligero retraso para asegurar que las velas estén cerradas.
+
+Además, registra en logs cuando los filtros de horario y días hábiles
+no se cumplen, indicando el motivo del rechazo (T02).
 """
 
 import time
+import logging
 from datetime import datetime, timedelta
 from typing import Callable, Dict, Any, Optional
 from dataclasses import dataclass
@@ -36,19 +41,35 @@ class CycleScheduler:
     - Validar condiciones de trading (horario, día hábil)
     - Aplicar retraso configurable para asegurar velas cerradas
     - Ejecutar callback del ciclo de trading
+    - Registrar en logs cuando filtros no se cumplen (T02)
     - Manejar timeouts y errores gracefully
     """
 
-    def __init__(self, time_validator: TimeValidator, config: Dict[str, Any]):
+    def __init__(
+        self,
+        time_validator: TimeValidator,
+        config: Dict[str, Any],
+        logger: Optional[logging.Logger] = None,
+        bot_name: Optional[str] = None
+    ):
         """
         Inicializa el CycleScheduler.
 
         Args:
             time_validator: Instancia de TimeValidator para validaciones de tiempo
             config: Configuración del scheduler
+            logger: Logger opcional para registrar eventos (T02)
+            bot_name: Nombre del bot para contexto en logs (T02)
         """
         self.time_validator = time_validator
         self.config = config.get('cycle_scheduler', {})
+        self.bot_name = bot_name or "UnknownBot"
+        
+        # Logger - crear uno por defecto si no se proporciona
+        if logger is None:
+            self.logger = logging.getLogger(f"CycleScheduler.{self.bot_name}")
+        else:
+            self.logger = logger
 
         # Configuración con valores por defecto
         self.enabled = self.config.get('enabled', True)
@@ -73,6 +94,8 @@ class CycleScheduler:
     def should_start_cycle(self) -> bool:
         """
         Determina si se debe iniciar un ciclo en este momento.
+        
+        T02: Registra en logs cuando los filtros no se cumplen.
 
         Returns:
             True si se debe iniciar el ciclo, False en caso contrario
@@ -80,14 +103,25 @@ class CycleScheduler:
         if not self.enabled:
             return False
 
-        # Verificar que sea hora de trading
+        # Verificar que sea hora de trading (T02: aplicación de filtros)
         validation = self.time_validator.is_trading_time()
         if not validation.is_valid:
+            # T02: Registrar motivo del rechazo en logs
+            self.logger.info(
+                f"[{self.bot_name}] Cycle rejected by time filter: {validation.reason}"
+            )
             return False
 
         # Verificar que sea exactamente el inicio de la hora (HH:00)
         current_time = datetime.now()
-        return current_time.minute == 0 and current_time.second == 0
+        is_hour_start = current_time.minute == 0 and current_time.second == 0
+        
+        if not is_hour_start:
+            # No es inicio de hora, pero no es un "rechazo de filtro"
+            # No logueamos esto para evitar spam
+            pass
+        
+        return is_hour_start
 
     def wait_for_cycle_start(self) -> bool:
         """
