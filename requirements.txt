@@ -2,6 +2,8 @@
 python-dotenv==1.0.0
 pydantic==2.5.0
 pydantic-settings==2.1.0
+tzdata==2024.1  # Required for timezone support on Windows with Python 3.13+
+pandas==2.1.4  # Required for data analysis and MT5 data handling
 
 # Testing
 pytest==7.4.3
