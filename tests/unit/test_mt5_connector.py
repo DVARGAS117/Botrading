@@ -538,3 +538,130 @@ class TestMT5Connector:
         
         # Verificar que se registraron errores
         assert mock_logger.error.called
+
+
+class TestMT5ConnectorSymbolInfo:
+    """Tests para obtención de información de símbolos"""
+    
+    @patch('src.core.mt5_connector.mt5')
+    def test_get_symbol_info_success(self, mock_mt5):
+        """
+        Dado que hay una conexión activa y el símbolo existe
+        Cuando se obtiene información del símbolo
+        Entonces se devuelve la información correctamente
+        """
+        config = BrokerConfig(
+            account_id="12345678",
+            password="test_password",
+            server="Pepperstone-Demo"
+        )
+        connector = MT5Connector(config)
+        connector._connected = True
+        
+        # Mock de symbol_info
+        mock_symbol_info = Mock()
+        mock_symbol_info.volume_min = 0.01
+        mock_symbol_info.volume_max = 100.0
+        mock_symbol_info.volume_step = 0.01
+        mock_symbol_info.point = 0.00001
+        mock_symbol_info.tick_size = 0.00001
+        mock_symbol_info.tick_value = 1.0
+        mock_symbol_info.contract_size = 100000
+        
+        mock_mt5.symbol_info.return_value = mock_symbol_info
+        
+        result = connector.get_symbol_info("EURUSD")
+        
+        assert result.volume_min == 0.01
+        assert result.volume_max == 100.0
+        assert result.volume_step == 0.01
+        mock_mt5.symbol_info.assert_called_once_with("EURUSD")
+    
+    @patch('src.core.mt5_connector.mt5')
+    def test_get_symbol_info_not_found_then_selected(self, mock_mt5):
+        """
+        Dado que el símbolo no está en la lista inicial
+        Cuando se intenta seleccionar el símbolo primero
+        Entonces se devuelve la información después de seleccionarlo
+        """
+        config = BrokerConfig(
+            account_id="12345678",
+            password="test_password",
+            server="Pepperstone-Demo"
+        )
+        connector = MT5Connector(config)
+        connector._connected = True
+        
+        # Mock de symbol_info
+        mock_symbol_info = Mock()
+        mock_symbol_info.volume_min = 0.01
+        mock_symbol_info.volume_max = 50.0
+        mock_symbol_info.volume_step = 0.01
+        
+        # Primera llamada retorna None, segunda retorna el objeto
+        mock_mt5.symbol_info.side_effect = [None, mock_symbol_info]
+        mock_mt5.symbol_select.return_value = True
+        
+        result = connector.get_symbol_info("XAUUSD")
+        
+        assert result.volume_min == 0.01
+        assert result.volume_max == 50.0
+        mock_mt5.symbol_select.assert_called_once_with("XAUUSD", True)
+    
+    @patch('src.core.mt5_connector.mt5')
+    def test_get_symbol_info_not_found_error(self, mock_mt5):
+        """
+        Dado que el símbolo no existe en el broker
+        Cuando se intenta obtener su información
+        Entonces se lanza ValueError
+        """
+        config = BrokerConfig(
+            account_id="12345678",
+            password="test_password",
+            server="Pepperstone-Demo"
+        )
+        connector = MT5Connector(config)
+        connector._connected = True
+        
+        mock_mt5.symbol_info.return_value = None
+        mock_mt5.symbol_select.return_value = False
+        
+        with pytest.raises(ValueError, match="Symbol 'INVALID' not found"):
+            connector.get_symbol_info("INVALID")
+    
+    @patch('src.core.mt5_connector.mt5')
+    def test_get_symbol_info_empty_symbol(self, mock_mt5):
+        """
+        Dado que se proporciona un símbolo vacío
+        Cuando se intenta obtener su información
+        Entonces se lanza ValueError
+        """
+        config = BrokerConfig(
+            account_id="12345678",
+            password="test_password",
+            server="Pepperstone-Demo"
+        )
+        connector = MT5Connector(config)
+        connector._connected = True
+        
+        with pytest.raises(ValueError, match="Symbol name cannot be empty"):
+            connector.get_symbol_info("")
+    
+    @patch('src.core.mt5_connector.mt5')
+    def test_get_symbol_info_no_connection(self, mock_mt5):
+        """
+        Dado que no hay conexión activa
+        Cuando se intenta obtener información del símbolo
+        Entonces se lanza MT5ConnectionError
+        """
+        config = BrokerConfig(
+            account_id="12345678",
+            password="test_password",
+            server="Pepperstone-Demo"
+        )
+        connector = MT5Connector(config)
+        connector._connected = False
+        
+        with pytest.raises(MT5ConnectionError, match="No hay conexión activa"):
+            connector.get_symbol_info("EURUSD")
+

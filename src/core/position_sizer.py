@@ -18,6 +18,12 @@ from typing import Optional
 import logging
 import math
 
+# Importar LotAdjuster para delegarle el ajuste de lotes
+from src.core.lot_adjuster import (
+    LotAdjuster,
+    SymbolSpecification as LotAdjusterSymbolSpec
+)
+
 
 # ============================================================================
 # EXCEPCIONES
@@ -200,6 +206,7 @@ class PositionSizer:
             logger: Logger opcional para registrar operaciones
         """
         self.logger = logger or self._create_default_logger()
+        self.lot_adjuster = LotAdjuster(logger=self.logger)
     
     def _create_default_logger(self) -> logging.Logger:
         """Crear logger por defecto"""
@@ -398,6 +405,8 @@ class PositionSizer:
         """
         Ajustar lote a los límites del símbolo (min, max, step).
         
+        NOTA: Este método ahora delega el trabajo a LotAdjuster.
+        
         Args:
             lot_size: Tamaño de lote calculado
             symbol_spec: Especificaciones del símbolo
@@ -405,33 +414,18 @@ class PositionSizer:
         Returns:
             Lote ajustado a límites
         """
-        # 1. Verificar mínimo
-        if lot_size < symbol_spec.volume_min:
-            return symbol_spec.volume_min
+        # Convertir SymbolSpecification de PositionSizer a LotAdjuster
+        lot_adjuster_spec = LotAdjusterSymbolSpec(
+            symbol=symbol_spec.symbol,
+            volume_min=symbol_spec.volume_min,
+            volume_max=symbol_spec.volume_max,
+            volume_step=symbol_spec.volume_step
+        )
         
-        # 2. Verificar máximo
-        if lot_size > symbol_spec.volume_max:
-            return symbol_spec.volume_max
+        # Usar LotAdjuster para ajustar el lote
+        adjusted_result = self.lot_adjuster.adjust_lot(lot_size, lot_adjuster_spec)
         
-        # 3. Redondear al step más cercano
-        # Ejemplo: lot = 0.456, step = 0.01
-        # steps = 0.456 / 0.01 = 45.6
-        # rounded_steps = 46
-        # adjusted = 46 * 0.01 = 0.46
-        steps = lot_size / symbol_spec.volume_step
-        rounded_steps = round(steps)
-        adjusted_lot = rounded_steps * symbol_spec.volume_step
-        
-        # 4. Asegurar que no excede límites después del redondeo
-        if adjusted_lot < symbol_spec.volume_min:
-            return symbol_spec.volume_min
-        if adjusted_lot > symbol_spec.volume_max:
-            # Redondear hacia abajo en lugar de hacia arriba
-            rounded_steps = math.floor(steps)
-            adjusted_lot = rounded_steps * symbol_spec.volume_step
-        
-        # 5. Redondear a 2 decimales para evitar problemas de precisión flotante
-        return round(adjusted_lot, 2)
+        return adjusted_result.adjusted_lot
     
     def calculate_lot_for_buy(
         self,
