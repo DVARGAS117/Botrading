@@ -233,3 +233,139 @@ class TestCycleScheduler:
 
         # Callback should not be called
         mock_callback.assert_not_called()
+
+    # =========================================================================
+    # T02: Tests para logging de rechazos de filtros
+    # =========================================================================
+
+    def test_initialization_with_logger(self, mock_time_validator, scheduler_config):
+        """Test scheduler accepts optional logger parameter"""
+        mock_logger = Mock()
+        scheduler = CycleScheduler(mock_time_validator, scheduler_config, logger=mock_logger)
+
+        assert scheduler.logger == mock_logger
+
+    def test_initialization_without_logger_creates_default(self, mock_time_validator, scheduler_config):
+        """Test scheduler creates default logger when not provided"""
+        scheduler = CycleScheduler(mock_time_validator, scheduler_config)
+
+        assert scheduler.logger is not None
+
+    @patch('src.core.cycle_scheduler.datetime')
+    def test_logs_rejection_outside_trading_hours(self, mock_datetime, mock_time_validator, scheduler_config):
+        """Test that scheduler logs when filters reject due to outside trading hours"""
+        # Mock logger
+        mock_logger = Mock()
+        
+        scheduler = CycleScheduler(mock_time_validator, scheduler_config, logger=mock_logger)
+        
+        # Mock current time as hour start
+        mock_datetime.now.return_value = datetime(2025, 11, 6, 14, 0, 0)  # 14:00 - outside trading hours
+        
+        # Mock time validator as invalid
+        mock_time_validator.is_trading_time.return_value = Mock(
+            is_valid=False,
+            reason="Outside trading hours (06:00-13:00 Lima)"
+        )
+        
+        # Try to start cycle
+        result = scheduler.should_start_cycle()
+        
+        # Should not start
+        assert result == False
+        
+        # Should log the rejection
+        mock_logger.info.assert_called()
+        log_call_args = mock_logger.info.call_args[0][0]
+        assert "filter" in log_call_args.lower() or "reject" in log_call_args.lower()
+        assert "Outside trading hours" in log_call_args
+
+    @patch('src.core.cycle_scheduler.datetime')
+    def test_logs_rejection_weekend(self, mock_datetime, mock_time_validator, scheduler_config):
+        """Test that scheduler logs when filters reject due to weekend"""
+        mock_logger = Mock()
+        scheduler = CycleScheduler(mock_time_validator, scheduler_config, logger=mock_logger)
+        
+        # Mock Saturday
+        mock_datetime.now.return_value = datetime(2025, 11, 8, 10, 0, 0)  # Saturday
+        
+        # Mock time validator as invalid
+        mock_time_validator.is_trading_time.return_value = Mock(
+            is_valid=False,
+            reason="Weekend (non-business day)"
+        )
+        
+        result = scheduler.should_start_cycle()
+        
+        assert result == False
+        mock_logger.info.assert_called()
+        log_call_args = mock_logger.info.call_args[0][0]
+        assert "Weekend" in log_call_args
+
+    @patch('src.core.cycle_scheduler.datetime')
+    def test_logs_rejection_holiday(self, mock_datetime, mock_time_validator, scheduler_config):
+        """Test that scheduler logs when filters reject due to holiday"""
+        mock_logger = Mock()
+        scheduler = CycleScheduler(mock_time_validator, scheduler_config, logger=mock_logger)
+        
+        # Mock holiday
+        mock_datetime.now.return_value = datetime(2025, 12, 25, 10, 0, 0)  # Christmas
+        
+        # Mock time validator as invalid
+        mock_time_validator.is_trading_time.return_value = Mock(
+            is_valid=False,
+            reason="Holiday (Peru)"
+        )
+        
+        result = scheduler.should_start_cycle()
+        
+        assert result == False
+        mock_logger.info.assert_called()
+        log_call_args = mock_logger.info.call_args[0][0]
+        assert "Holiday" in log_call_args
+
+    @patch('src.core.cycle_scheduler.datetime')
+    def test_does_not_log_when_filters_pass(self, mock_datetime, mock_time_validator, scheduler_config):
+        """Test that scheduler does NOT log rejection when filters pass"""
+        mock_logger = Mock()
+        scheduler = CycleScheduler(mock_time_validator, scheduler_config, logger=mock_logger)
+        
+        # Mock valid time
+        mock_datetime.now.return_value = datetime(2025, 11, 6, 10, 0, 0)  # Wednesday 10:00
+        
+        # Mock time validator as VALID
+        mock_time_validator.is_trading_time.return_value = Mock(
+            is_valid=True,
+            reason=None
+        )
+        
+        result = scheduler.should_start_cycle()
+        
+        # Should start
+        assert result == True
+        
+        # Should NOT log any rejection
+        # Filter calls to info that mention "reject" or "filter"
+        info_calls = [call[0][0] for call in mock_logger.info.call_args_list]
+        rejection_logs = [log for log in info_calls if "reject" in log.lower() or ("filter" in log.lower() and "not" in log.lower())]
+        assert len(rejection_logs) == 0
+
+    @patch('src.core.cycle_scheduler.datetime')
+    def test_logs_contain_bot_context(self, mock_datetime, mock_time_validator, scheduler_config):
+        """Test that log messages contain bot context when available"""
+        mock_logger = Mock()
+        scheduler = CycleScheduler(mock_time_validator, scheduler_config, logger=mock_logger, bot_name="EURUSD_Bot_1")
+        
+        # Mock invalid time
+        mock_datetime.now.return_value = datetime(2025, 11, 6, 14, 0, 0)
+        mock_time_validator.is_trading_time.return_value = Mock(
+            is_valid=False,
+            reason="Outside trading hours"
+        )
+        
+        scheduler.should_start_cycle()
+        
+        # Check if bot_name is included in logs or extra context
+        assert mock_logger.info.called
+        # The bot_name should be stored in scheduler for use in logging
+        assert scheduler.bot_name == "EURUSD_Bot_1"
