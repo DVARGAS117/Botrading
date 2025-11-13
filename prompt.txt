@@ -1,5 +1,6 @@
 necesito que revises nuestro proyecto, para ello, encontraras una carpeta llamada context y dentro toda la documentacion del proyecto.
-en GitHub CLI, podras encontrar los issues abiertos y cerrados del proyecto, necesito que escogas uno de los issues y trabaja en resolverlo.
+
 como regla principal debes regirte por las indicaciones que se encuentran en el archivo context/agents.md
-antes de empezar, indica el issue seleccionado y su beneficio o funcionalidad.
-asegurate de vanzar por fases y/o ejecutar el issue mas critico.
+antes de empezar debes catualizar tu rama desarrollo, luego indica el beneficio o funcionalidad del issue.
+se te asignará una tarea (issue), siempre debes de buscar el numero asignado en GitHub CLI.
+trabajaras el issue: 
