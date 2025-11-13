@@ -1,0 +1,53 @@
+{
+  "enabled": true,
+  "interval_minutes": 10,
+  "mode": "persistent",
+  
+  "trading_window": {
+    "timezone": "America/Lima",
+    "start": "06:00",
+    "end": "13:00",
+    "days": ["MON", "TUE", "WED", "THU", "FRI"]
+  },
+  
+  "bots": {
+    "bot_1": {
+      "enabled": true,
+      "mode": "persistent",
+      "comment": "Bot numérico con contexto persistente"
+    },
+    "bot_2": {
+      "enabled": true,
+      "mode": "new",
+      "comment": "Bot visual con nueva conversación cada vez"
+    },
+    "bot_3": {
+      "enabled": true,
+      "mode": "persistent",
+      "comment": "Bot híbrido con contexto persistente"
+    },
+    "bot_4": {
+      "enabled": false,
+      "mode": "new",
+      "comment": "Bot deshabilitado temporalmente"
+    },
+    "bot_5": {
+      "enabled": true,
+      "mode": "new",
+      "comment": "Bot experimental con nueva conversación"
+    }
+  },
+  
+  "limits": {
+    "max_reevaluations_per_position": 50,
+    "max_cost_per_position_usd": 2.0,
+    "comment": "Límites para prevenir costos excesivos"
+  },
+  
+  "logging": {
+    "enabled": true,
+    "level": "INFO",
+    "log_decisions": true,
+    "log_costs": true
+  }
+}
