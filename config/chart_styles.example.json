@@ -1,0 +1,176 @@
+{
+    "_comment": "Configuración de estilos de gráficos para ChartGenerator - T24",
+    "_description": "Define estilos visuales y configuración de indicadores para generar gráficos consistentes por timeframe",
+    
+    "chart_styles": {
+        "default": {
+            "width": 1200,
+            "height": 800,
+            "style_type": "charles",
+            "show_volume": true,
+            "show_grid": true,
+            "title_fontsize": 12,
+            "dpi": 100,
+            "description": "Estilo por defecto para gráficos de trading"
+        },
+        "compact": {
+            "width": 800,
+            "height": 600,
+            "style_type": "yahoo",
+            "show_volume": false,
+            "show_grid": false,
+            "title_fontsize": 10,
+            "dpi": 100,
+            "description": "Estilo compacto sin volumen para análisis rápido"
+        },
+        "detailed": {
+            "width": 1920,
+            "height": 1080,
+            "style_type": "binance",
+            "show_volume": true,
+            "show_grid": true,
+            "title_fontsize": 14,
+            "dpi": 150,
+            "description": "Estilo detallado de alta resolución para análisis profundo"
+        },
+        "presentation": {
+            "width": 1600,
+            "height": 900,
+            "style_type": "charles",
+            "show_volume": true,
+            "show_grid": true,
+            "title_fontsize": 16,
+            "dpi": 120,
+            "description": "Estilo optimizado para presentaciones y reportes"
+        }
+    },
+    
+    "indicator_styles": {
+        "numeric_bot": {
+            "show_emas": true,
+            "ema_periods": [20, 50],
+            "ema_colors": ["blue", "red"],
+            "show_rsi": false,
+            "rsi_period": 14,
+            "show_macd": false,
+            "macd_params": [12, 26, 9],
+            "description": "Indicadores para bot numérico - Solo EMAs superpuestas"
+        },
+        "visual_bot_with_indicators": {
+            "show_emas": true,
+            "ema_periods": [20, 50],
+            "ema_colors": ["#4169E1", "#DC143C"],
+            "show_rsi": false,
+            "rsi_period": 14,
+            "show_macd": false,
+            "macd_params": [12, 26, 9],
+            "description": "Bot visual con EMAs para análisis de tendencia"
+        },
+        "visual_bot_clean": {
+            "show_emas": false,
+            "ema_periods": [],
+            "ema_colors": [],
+            "show_rsi": false,
+            "rsi_period": 14,
+            "show_macd": false,
+            "macd_params": [12, 26, 9],
+            "description": "Bot visual sin indicadores - Solo acción del precio"
+        },
+        "hybrid_bot": {
+            "show_emas": true,
+            "ema_periods": [20, 50],
+            "ema_colors": ["#0066CC", "#CC0000"],
+            "show_rsi": false,
+            "rsi_period": 14,
+            "show_macd": false,
+            "macd_params": [12, 26, 9],
+            "description": "Bot híbrido con indicadores combinados"
+        }
+    },
+    
+    "timeframe_configs": {
+        "M5": {
+            "chart_style": "default",
+            "indicator_style": "visual_bot_with_indicators",
+            "output_filename_pattern": "{symbol}_{timeframe}_5m.png",
+            "description": "Configuración para timeframe de 5 minutos"
+        },
+        "M15": {
+            "chart_style": "default",
+            "indicator_style": "visual_bot_with_indicators",
+            "output_filename_pattern": "{symbol}_{timeframe}_15m.png",
+            "description": "Configuración para timeframe de 15 minutos"
+        },
+        "H1": {
+            "chart_style": "default",
+            "indicator_style": "visual_bot_with_indicators",
+            "output_filename_pattern": "{symbol}_{timeframe}_1h.png",
+            "description": "Configuración para timeframe de 1 hora"
+        }
+    },
+    
+    "gemini_optimization": {
+        "max_size_mb": 20,
+        "max_width": 4096,
+        "max_height": 4096,
+        "preferred_format": "png",
+        "compression_quality": 90,
+        "auto_compress_above_mb": 15,
+        "description": "Parámetros de optimización para compatibilidad con Gemini API"
+    },
+    
+    "output_settings": {
+        "default_output_dir": "./charts",
+        "keep_last_charts": 50,
+        "cleanup_on_shutdown": false,
+        "create_subdirs_by_symbol": true,
+        "create_subdirs_by_timeframe": false,
+        "description": "Configuración de gestión de archivos de salida"
+    },
+    
+    "available_mplfinance_styles": [
+        "yahoo",
+        "charles",
+        "binance",
+        "mike",
+        "nightclouds",
+        "sas",
+        "starsandstripes",
+        "brasil",
+        "ibd"
+    ],
+    
+    "color_schemes": {
+        "classic": {
+            "ema_20": "#4169E1",
+            "ema_50": "#DC143C",
+            "ema_200": "#228B22",
+            "background": "#FFFFFF",
+            "grid": "#E0E0E0"
+        },
+        "dark": {
+            "ema_20": "#00BFFF",
+            "ema_50": "#FF6347",
+            "ema_200": "#32CD32",
+            "background": "#1E1E1E",
+            "grid": "#404040"
+        },
+        "professional": {
+            "ema_20": "#0066CC",
+            "ema_50": "#CC0000",
+            "ema_200": "#009900",
+            "background": "#F5F5F5",
+            "grid": "#CCCCCC"
+        }
+    },
+    
+    "notes": [
+        "Los estilos de gráfico deben ser compatibles con mplfinance",
+        "EMAs se muestran superpuestas en el gráfico principal",
+        "RSI y MACD requieren paneles separados (próxima versión)",
+        "Gemini API acepta PNG y JPEG con máximo 20MB por imagen",
+        "Para bots visuales, elegir entre 'visual_bot_with_indicators' o 'visual_bot_clean'",
+        "Para bots numéricos, usar 'numeric_bot' (solo calcula indicadores, no genera gráficos)",
+        "La configuración puede personalizarse por símbolo y timeframe según necesidad"
+    ]
+}

@@ -9,6 +9,11 @@ pandas==2.1.4  # Required for data analysis and MT5 data handling
 google-generativeai>=0.3.0  # Gemini API client
 Pillow>=10.0.0  # Image handling for visual bot analysis
 
+# Chart Generation (T24)
+matplotlib>=3.7.0  # Base plotting library
+mplfinance>=0.12.0  # Financial charts (candlesticks)
+ta>=0.11.0  # Technical analysis indicators
+
 # Testing
 pytest==7.4.3
 pytest-cov==4.1.0
