@@ -57,6 +57,3 @@ htmlcov/
 *.db
 *.sqlite
 *.sqlite3
-
-# otros
-prompt.txt
