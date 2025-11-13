@@ -199,7 +199,17 @@ class TestGeminiClient:
             max_tokens=1024,
             retry_attempts=3
         )
-        return GeminiClient(api_key=mock_api_key, config=config)
+        
+        # Mockear el modelo durante la inicialización
+        with patch('src.core.gemini_client.genai') as mock_genai:
+            mock_model = Mock()
+            mock_genai.GenerativeModel.return_value = mock_model
+            mock_genai.configure = Mock()
+            
+            client = GeminiClient(api_key=mock_api_key, config=config)
+            client.model = mock_model  # Asegurar que tenemos el mock
+            
+            yield client
     
     def test_client_initialization(self, client):
         """Verificar inicialización correcta del cliente"""
@@ -212,18 +222,16 @@ class TestGeminiClient:
         with pytest.raises(GeminiClientError, match="API key es requerida"):
             GeminiClient(api_key=None)
     
-    @patch('google.generativeai.GenerativeModel')
-    def test_send_text_prompt_success(self, mock_model, client):
+    def test_send_text_prompt_success(self, client):
         """Verificar envío exitoso de prompt de texto"""
         # Mock de la respuesta de la API
         mock_response = Mock()
         mock_response.text = '{"accion": "OPERAR", "direccion": "BUY"}'
+        mock_response.usage_metadata = Mock()
         mock_response.usage_metadata.prompt_token_count = 100
         mock_response.usage_metadata.candidates_token_count = 50
         
-        mock_model_instance = Mock()
-        mock_model_instance.generate_content.return_value = mock_response
-        mock_model.return_value = mock_model_instance
+        client.model.generate_content.return_value = mock_response
         
         # Ejecutar
         prompt = "Analiza EURUSD con RSI 65.0"

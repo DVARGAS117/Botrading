@@ -36,6 +36,8 @@ try:
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
+    GenerationConfig = None  # type: ignore
+    genai = None  # type: ignore
     logging.warning("google-generativeai no está instalado. Instala con: pip install google-generativeai")
 
 
@@ -257,8 +259,10 @@ class GeminiClient:
         except Exception as e:
             raise GeminiClientError(f"Error inicializando modelo Gemini: {str(e)}")
     
-    def _get_generation_config(self) -> GenerationConfig:
+    def _get_generation_config(self) -> Any:
         """Crea la configuración de generación para la API"""
+        if not GEMINI_AVAILABLE or GenerationConfig is None:
+            raise GeminiClientError("google-generativeai no está disponible")
         return GenerationConfig(
             temperature=self.config.temperature,
             max_output_tokens=self.config.max_tokens,
