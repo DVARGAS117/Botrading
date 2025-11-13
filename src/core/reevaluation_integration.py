@@ -187,6 +187,17 @@ class ReevaluationIntegration:
             "last_cycle_at": None
         }
         
+        # Estadísticas específicas para reevaluación dual (T16)
+        self._dual_stats = {
+            "total_dual_groups": 0,
+            "successful_market_reevaluations": 0,
+            "successful_limit_reevaluations": 0,
+            "failed_market_reevaluations": 0,
+            "failed_limit_reevaluations": 0,
+            "total_dual_cost_usd": 0.0,
+            "total_dual_tokens": 0
+        }
+        
         self.logger.info(
             f"ReevaluationIntegration inicializada para {bot_name} "
             f"(interval={config.interval_minutes}min, mode={config.mode})"
@@ -501,6 +512,191 @@ class ReevaluationIntegration:
             True si está ejecutándose, False en caso contrario
         """
         return self._running
+    
+    def _detect_dual_order_groups(self) -> List[Dict[str, Any]]:
+        """
+        Detecta grupos de órdenes duales (Market + Limit) por magic numbers consecutivos
+        
+        Returns:
+            Lista de grupos duales, cada uno con market_magic, limit_magic y posiciones
+        """
+        try:
+            # Obtener todas las posiciones abiertas
+            all_positions = self.position_manager.get_positions()
+            
+            # Filtrar posiciones del bot (basado en magic number base)
+            bot_positions = [
+                pos for pos in all_positions
+                if pos.get("magic", 0) // 1000 == self.magic_number // 1000  # Mismo prefijo
+            ]
+            
+            # Agrupar por magic number
+            positions_by_magic = {}
+            for pos in bot_positions:
+                magic = pos.get("magic", 0)
+                if magic not in positions_by_magic:
+                    positions_by_magic[magic] = []
+                positions_by_magic[magic].append(pos)
+            
+            # Detectar pares consecutivos (market: N, limit: N+1)
+            dual_groups = []
+            processed_magics = set()
+            
+            for magic in sorted(positions_by_magic.keys()):
+                if magic in processed_magics:
+                    continue
+                
+                next_magic = magic + 1
+                if next_magic in positions_by_magic:
+                    # Verificar que sea Market (último dígito 0) y Limit (último dígito 1)
+                    if (magic % 10 == 0) and (next_magic % 10 == 1):
+                        dual_groups.append({
+                            "market_magic": magic,
+                            "limit_magic": next_magic,
+                            "positions": positions_by_magic[magic] + positions_by_magic[next_magic]
+                        })
+                        processed_magics.add(magic)
+                        processed_magics.add(next_magic)
+            
+            self.logger.debug(f"Detectados {len(dual_groups)} grupos duales")
+            return dual_groups
+        
+        except Exception as e:
+            self.logger.error(f"Error detectando grupos duales: {e}")
+            return []
+    
+    async def reevaluate_dual_orders(self) -> List[Dict[str, Any]]:
+        """
+        Reevalúa órdenes duales (Market y Limit) de forma independiente
+        
+        Returns:
+            Lista de resultados de reevaluación dual
+        """
+        results = []
+        
+        try:
+            # Detectar grupos duales
+            dual_groups = self._detect_dual_order_groups()
+            
+            if not dual_groups:
+                self.logger.debug("No se encontraron órdenes duales para reevaluar")
+                return results
+            
+            self.logger.info(f"Reevaluando {len(dual_groups)} grupos duales")
+            
+            for group in dual_groups:
+                market_magic = group["market_magic"]
+                limit_magic = group["limit_magic"]
+                
+                self.logger.debug(
+                    f"Reevaluando dual: Market({market_magic}) + Limit({limit_magic})"
+                )
+                
+                # Reevaluar Market
+                market_results = await self.manager.reevaluate_positions(
+                    bot_id=str(self.bot_id),
+                    magic_number=market_magic
+                )
+                
+                # Reevaluar Limit
+                limit_results = await self.manager.reevaluate_positions(
+                    bot_id=str(self.bot_id),
+                    magic_number=limit_magic
+                )
+                
+                # Procesar resultados Market
+                for result in market_results:
+                    result_dict = {
+                        "type": "Market",
+                        "magic": market_magic,
+                        "success": result.success,
+                        "action": result.action_taken,
+                        "reasoning": result.reasoning,
+                        "tokens": result.tokens_used,
+                        "cost": result.cost,
+                        "error": result.error_message
+                    }
+                    results.append(result_dict)
+                    
+                    # Actualizar estadísticas duales
+                    self._dual_stats["total_dual_tokens"] += result.tokens_used
+                    self._dual_stats["total_dual_cost_usd"] += result.cost
+                    
+                    if result.success:
+                        self._dual_stats["successful_market_reevaluations"] += 1
+                    else:
+                        self._dual_stats["failed_market_reevaluations"] += 1
+                
+                # Procesar resultados Limit
+                for result in limit_results:
+                    result_dict = {
+                        "type": "Limit",
+                        "magic": limit_magic,
+                        "success": result.success,
+                        "action": result.action_taken,
+                        "reasoning": result.reasoning,
+                        "tokens": result.tokens_used,
+                        "cost": result.cost,
+                        "error": result.error_message
+                    }
+                    results.append(result_dict)
+                    
+                    # Actualizar estadísticas duales
+                    self._dual_stats["total_dual_tokens"] += result.tokens_used
+                    self._dual_stats["total_dual_cost_usd"] += result.cost
+                    
+                    if result.success:
+                        self._dual_stats["successful_limit_reevaluations"] += 1
+                    else:
+                        self._dual_stats["failed_limit_reevaluations"] += 1
+                
+                # Incrementar contador de grupos
+                self._dual_stats["total_dual_groups"] += 1
+            
+            self.logger.info(f"Reevaluación dual completada: {len(results)} resultados")
+            return results
+        
+        except Exception as e:
+            self.logger.error(f"Error en reevaluación dual: {e}", exc_info=True)
+            return results
+    
+    def get_dual_stats(self) -> Dict[str, Any]:
+        """
+        Obtiene estadísticas de reevaluación dual
+        
+        Returns:
+            Diccionario con estadísticas de reevaluación dual
+        """
+        stats = self._dual_stats.copy()
+        
+        # Calcular tasas de éxito
+        total_market = (
+            stats["successful_market_reevaluations"] + 
+            stats["failed_market_reevaluations"]
+        )
+        total_limit = (
+            stats["successful_limit_reevaluations"] + 
+            stats["failed_limit_reevaluations"]
+        )
+        total_overall = total_market + total_limit
+        
+        stats["market_success_rate"] = (
+            (stats["successful_market_reevaluations"] / total_market * 100)
+            if total_market > 0 else 0.0
+        )
+        
+        stats["limit_success_rate"] = (
+            (stats["successful_limit_reevaluations"] / total_limit * 100)
+            if total_limit > 0 else 0.0
+        )
+        
+        stats["overall_success_rate"] = (
+            ((stats["successful_market_reevaluations"] + stats["successful_limit_reevaluations"]) 
+             / total_overall * 100)
+            if total_overall > 0 else 0.0
+        )
+        
+        return stats
     
     def __repr__(self) -> str:
         """Representación del objeto"""
