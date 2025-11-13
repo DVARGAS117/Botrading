@@ -28,6 +28,7 @@ from datetime import datetime
 import logging
 import time
 import os
+import json
 
 try:
     import google.generativeai as genai
@@ -84,6 +85,35 @@ class GeminiConfig:
     def to_dict(self) -> Dict[str, Any]:
         """Convierte la configuración a diccionario"""
         return asdict(self)
+    
+    @classmethod
+    def from_json_file(cls, file_path: str) -> 'GeminiConfig':
+        """
+        Carga la configuración desde un archivo JSON
+        
+        Args:
+            file_path: Ruta al archivo JSON con la configuración
+            
+        Returns:
+            Instancia de GeminiConfig con los valores del archivo
+            
+        Raises:
+            FileNotFoundError: Si el archivo no existe
+            json.JSONDecodeError: Si el JSON es inválido
+            ValueError: Si los valores no son válidos
+        """
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Filtrar solo los campos válidos para GeminiConfig
+        valid_fields = {
+            'model', 'temperature', 'max_tokens', 'top_p', 'top_k',
+            'timeout', 'retry_attempts', 'backoff_factor'
+        }
+        
+        config_data = {k: v for k, v in data.items() if k in valid_fields}
+        
+        return cls(**config_data)
 
 
 @dataclass
@@ -512,6 +542,22 @@ class GeminiClient:
         self.config = new_config
         self._initialize_model()  # Reinicializar modelo con nueva config
         self.logger.info("Configuración actualizada")
+    
+    def update_config_from_file(self, config_file_path: str) -> None:
+        """
+        Actualiza la configuración del cliente desde un archivo JSON
+        
+        Args:
+            config_file_path: Ruta al archivo JSON con la nueva configuración
+            
+        Raises:
+            FileNotFoundError: Si el archivo no existe
+            json.JSONDecodeError: Si el JSON es inválido
+            ValueError: Si los valores no son válidos
+        """
+        new_config = GeminiConfig.from_json_file(config_file_path)
+        self.update_config(new_config)
+        self.logger.info(f"Configuración actualizada desde archivo: {config_file_path}")
     
     def set_cost_rates(
         self,

@@ -23,6 +23,9 @@ from src.core.gemini_client import (
     GeminiResponse,
     GeminiConfig
 )
+import json
+import tempfile
+import os
 
 
 class TestGeminiConfig:
@@ -78,6 +81,45 @@ class TestGeminiConfig:
         assert result["model"] == "gemini-2.5-pro"
         assert result["temperature"] == 0.8
         assert "max_tokens" in result
+    
+    def test_config_from_json_file(self, tmp_path):
+        """Verificar carga de configuración desde archivo JSON"""
+        # Crear archivo JSON temporal
+        config_data = {
+            "model": "gemini-2.5-pro",
+            "temperature": 0.5,
+            "max_tokens": 1024,
+            "timeout": 60,
+            "retry_attempts": 5
+        }
+        
+        config_file = tmp_path / "test_config.json"
+        with open(config_file, 'w') as f:
+            json.dump(config_data, f)
+        
+        # Cargar configuración
+        config = GeminiConfig.from_json_file(str(config_file))
+        
+        # Verificar valores
+        assert config.model == "gemini-2.5-pro"
+        assert config.temperature == 0.5
+        assert config.max_tokens == 1024
+        assert config.timeout == 60
+        assert config.retry_attempts == 5
+    
+    def test_config_from_json_file_missing_file(self):
+        """Verificar error cuando el archivo no existe"""
+        with pytest.raises(FileNotFoundError):
+            GeminiConfig.from_json_file("nonexistent_file.json")
+    
+    def test_config_from_json_file_invalid_json(self, tmp_path):
+        """Verificar error con JSON inválido"""
+        config_file = tmp_path / "invalid.json"
+        with open(config_file, 'w') as f:
+            f.write("invalid json content")
+        
+        with pytest.raises(json.JSONDecodeError):
+            GeminiConfig.from_json_file(str(config_file))
 
 
 class TestGeminiResponse:
@@ -475,3 +517,31 @@ class TestGeminiClientEdgeCases:
         # Verificar cambio
         assert client.config.temperature == 0.5
         assert client.config.max_tokens == 512
+    
+    def test_config_update_from_json_file(self, tmp_path):
+        """Verificar actualización de configuración desde archivo JSON"""
+        client = GeminiClient(api_key="test_key")
+        
+        # Configuración inicial
+        assert client.config.temperature == 0.7
+        
+        # Crear archivo JSON con nueva configuración
+        config_data = {
+            "model": "gemini-2.5-pro",
+            "temperature": 0.3,
+            "max_tokens": 512,
+            "timeout": 45
+        }
+        
+        config_file = tmp_path / "update_config.json"
+        with open(config_file, 'w') as f:
+            json.dump(config_data, f)
+        
+        # Actualizar desde archivo
+        client.update_config_from_file(str(config_file))
+        
+        # Verificar cambios
+        assert client.config.model == "gemini-2.5-pro"
+        assert client.config.temperature == 0.3
+        assert client.config.max_tokens == 512
+        assert client.config.timeout == 45
