@@ -1,7 +1,6 @@
 {
     "_comment": "Plantillas de prompts para consultas a IA - T10",
     "_description": "Define las plantillas de prompts por tipo de bot y tipo de consulta",
-    
     "prompt_templates": {
         "numerico_evaluacion": {
             "bot_type": "numerico",
@@ -9,35 +8,30 @@
             "description": "Evaluación inicial con datos numéricos (indicadores)",
             "template": "Analiza los siguientes datos de mercado y decide si operar.\n\nSÍMBOLO: {symbol}\nTIMEFRAME: {timeframe}\nPRECIO ACTUAL: {current_price}\n\nINDICADORES TÉCNICOS:\n{indicators_formatted}\n\nRESPONDE ÚNICAMENTE CON UN JSON EN EL FORMATO ESPECIFICADO."
         },
-        
         "visual_evaluacion": {
             "bot_type": "visual",
             "prompt_type": "evaluacion",
             "description": "Evaluación inicial con análisis visual de gráficos",
             "template": "Analiza las siguientes gráficas de {symbol} en timeframe {timeframe}.\n\nLas imágenes muestran el comportamiento del precio y pueden incluir indicadores técnicos.\n\nPRECIO ACTUAL: {current_price}\n\nAnaliza las tendencias, patrones y señales visuales.\n\nRESPONDE ÚNICAMENTE CON UN JSON EN EL FORMATO ESPECIFICADO."
         },
-        
         "hibrido_evaluacion": {
             "bot_type": "hibrido",
             "prompt_type": "evaluacion",
             "description": "Evaluación inicial combinando datos numéricos y visuales",
             "template": "Analiza los siguientes datos de mercado combinando información numérica y visual.\n\nSÍMBOLO: {symbol}\nTIMEFRAME: {timeframe}\nPRECIO ACTUAL: {current_price}\n\nINDICADORES TÉCNICOS:\n{indicators_formatted}\n\nAdemás, analiza las gráficas adjuntas que complementan los datos numéricos.\n\nRESPONDE ÚNICAMENTE CON UN JSON EN EL FORMATO ESPECIFICADO."
         },
-        
         "numerico_reevaluacion": {
             "bot_type": "numerico",
             "prompt_type": "reevaluacion",
             "description": "Reevaluación de posición abierta con datos numéricos",
             "template": "Reevalúa la siguiente posición abierta en {symbol}.\n\nDATOS ACTUALES:\n- Timeframe: {timeframe}\n- Precio Actual: {current_price}\n\nINDICADORES ACTUALES:\n{indicators_formatted}\n\nDATOS DE LA POSICIÓN:\n{position_data_formatted}\n\nDecide si MANTENER, ACTUALIZAR (SL/TP) o CERRAR la posición.\n\nRESPONDE ÚNICAMENTE CON UN JSON EN EL FORMATO ESPECIFICADO."
         },
-        
         "visual_reevaluacion": {
             "bot_type": "visual",
             "prompt_type": "reevaluacion",
             "description": "Reevaluación de posición abierta con análisis visual",
             "template": "Reevalúa la siguiente posición abierta en {symbol} analizando las gráficas actuales.\n\nDATOS DE LA POSICIÓN:\n{position_data_formatted}\n\nPRECIO ACTUAL: {current_price}\n\nAnaliza las gráficas adjuntas para determinar si la posición debe mantenerse, actualizarse o cerrarse.\n\nRESPONDE ÚNICAMENTE CON UN JSON EN EL FORMATO ESPECIFICADO."
         },
-        
         "hibrido_reevaluacion": {
             "bot_type": "hibrido",
             "prompt_type": "reevaluacion",
@@ -45,7 +39,6 @@
             "template": "Reevalúa la siguiente posición abierta en {symbol} usando datos numéricos y visuales.\n\nDATOS ACTUALES:\n- Precio Actual: {current_price}\n\nINDICADORES ACTUALES:\n{indicators_formatted}\n\nDATOS DE LA POSICIÓN:\n{position_data_formatted}\n\nAdemás, analiza las gráficas adjuntas.\n\nRESPONDE ÚNICAMENTE CON UN JSON EN EL FORMATO ESPECIFICADO."
         }
     },
-    
     "usage_guidelines": {
         "1_select_template": "Usa get_template(bot_type, prompt_type) para obtener la plantilla apropiada",
         "2_prepare_data": "Crea un objeto PromptData con todos los datos necesarios",
@@ -53,7 +46,6 @@
         "4_send_to_ia": "Envía el prompt generado a GeminiClient",
         "5_parse_response": "Usa AIResponseParser para validar y parsear la respuesta JSON"
     },
-    
     "custom_templates": {
         "_comment": "Aquí puedes agregar tus propias plantillas personalizadas",
         "_example": {
