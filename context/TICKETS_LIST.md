@@ -134,7 +134,7 @@
 |---|--------|------|-----------|--------|
 | 41 | Disponibilización de métricas diarias por bot | 3 | P1 | 📝 |
 | 42 | Comparación de desempeño entre metodologías | 3 | P1 | 📝 |
-| 43 | Monitoreo de estado y logs de cada bot | 3 | P1 | 📝 |
+| 43 | Monitoreo de estado y logs de cada bot | 3 | P1 | ✅ |
 
 ---
 
