@@ -2,8 +2,8 @@
 
 > Sistema de trading automatizado con múltiples bots orquestadores, integración MT5 y decisiones impulsadas por IA Gemini
 
-[![Tests](https://img.shields.io/badge/tests-301%20passing-brightgreen)]()
-[![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-711%20passing-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-87%25-brightgreen)]()
 [![Python](https://img.shields.io/badge/python-3.13+-blue)]()
 [![License](https://img.shields.io/badge/license-Private-red)]()
 
@@ -12,8 +12,8 @@
 ## 📋 Estado del Proyecto
 
 **Fase Actual:** Fase 0 - Fundamentos  
-**Último Ticket Completado:** T36 - Activación de filtros vía configuración ✅  
-**Fecha:** 6 de Noviembre de 2025
+**Último Ticket Completado:** T52 - Operación demo antes de real ✅  
+**Fecha:** 7 de Noviembre de 2025
 
 ---
 
@@ -46,6 +46,7 @@ BOTRADING/
 │   │   ├── ia_config_manager.py  # ✅ Alternancia config IA por bot
 │   │   ├── ai_response_parser.py # ✅ Parsing y validación respuestas IA
 │   │   ├── filter_manager.py     # ✅ Gestión de filtros configurables
+│   │   ├── demo_mode_validator.py # ✅ Validación demo antes de real
 │   │   ├── mt5_connector.py      # 🔜 Conexión MT5
 │   │   ├── ia_agent.py           # 🔜 Agente IA Gemini
 │   │   └── risk_manager.py       # 🔜 Gestión de riesgo
@@ -65,6 +66,7 @@ BOTRADING/
 │   ├── ia_profiles.example.json  # ✅ Perfiles IA alternantes
 │   ├── ai_response_schema.example.json # ✅ Schema validación respuestas IA
 │   ├── filters.example.json      # ✅ Config filtros de volatilidad/spread
+│   ├── demo_mode.example.json    # ✅ Config validación demo antes de real
 │   └── ia_config.example.json    # Configuración IA
 ├── tests/                        # Tests
 │   ├── unit/                     # Tests unitarios
@@ -78,6 +80,7 @@ BOTRADING/
 │   │   ├── test_ia_config_manager.py # ✅ Tests config IA alternante
 │   │   ├── test_ai_response_parser.py # ✅ Tests parsing respuestas IA
 │   │   └── test_filter_manager.py # ✅ Tests filtros configurables
+│   │   └── test_demo_mode_validator.py # ✅ Tests validación demo
 │   ├── integration/              # ✅ Tests de integración
 │   │   └── test_core_integration.py # ✅ Tests integración
 │   └── e2e/                      # 🔜 Tests end-to-end
@@ -93,6 +96,7 @@ BOTRADING/
 │   │   ├── T48_validacion_cuota_ia.md  # ✅ Doc validación cuota IA
 │   │   ├── T49_config_alternante_ia.md  # ✅ Doc config IA alternante
 │   │   └── T36_filtros_configurables.md  # ✅ Doc filtros configurables
+│   │   └── T52_operacion_demo_antes_real.md  # ✅ Doc validación demo
 │   ├── FORMATO_RESPUESTAS_IA.md  # ✅ Formato respuestas IA validadas
 │   ├── agents.md                 # Reglas del agente
 │   ├── RESUMEN_EJECUTIVO.md      # Resumen del proyecto
@@ -183,6 +187,7 @@ pytest tests/ -v --cov=src
 | T49 | Alternancia de configuraciones de IA por bot | ✅ | 91% |
 | T40 | Registro de errores de parsing de respuestas IA | ✅ | 87% |
 | T36 | Activación de filtros vía configuración | ✅ | 86% |
+| T52 | Operación demo antes de real | ✅ | 88% |
 
 ---
 
@@ -225,6 +230,7 @@ pytest tests/unit/test_config_loader.py -v
 - **[T48 - Quota Validator](context/DOCUMENTACION/T48_validacion_cuota_ia.md)** - Validación de cuota IA
 - **[T49 - IA Config Manager](context/DOCUMENTACION/T49_config_alternante_ia.md)** - Alternancia de configuraciones IA
 - **[T36 - Filter Manager](context/DOCUMENTACION/T36_filtros_configurables.md)** - Filtros configurables
+- **[T52 - Demo Mode Validator](context/DOCUMENTACION/T52_operacion_demo_antes_real.md)** - Validación demo antes de real
 - **[Formato Respuestas IA](context/FORMATO_RESPUESTAS_IA.md)** - Formato JSON para prompts IA
 
 ---
@@ -278,6 +284,7 @@ pytest tests/unit/test_config_loader.py -v
 - [x] T49 - Alternancia configuración IA
 - [x] T40 - Registro errores parsing IA
 - [x] T36 - Filtros vía configuración
+- [x] T52 - Operación demo antes de real
 
 ### Fase 1: Núcleo (Próximamente)
 - [ ] Orquestación de bots
@@ -352,13 +359,13 @@ Este proyecto es privado. Todos los derechos reservados.
 |---------|-------|
 | Tickets Totales | 52 |
 | Épicas | 16 |
-| Tickets Completados | 11 |
-| Tests | 301 |
-| Cobertura | 90% |
+| Tickets Completados | 12 |
+| Tests | 711 |
+| Cobertura | 87% |
 | Líneas de Código | ~4,700 |
 
 ---
 
-**Última actualización:** 6 de Noviembre de 2025  
+**Última actualización:** 7 de Noviembre de 2025  
 **Versión:** 0.1.0  
 **Estado:** 🚀 En desarrollo activo

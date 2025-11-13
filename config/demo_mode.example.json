@@ -1,0 +1,13 @@
+{
+  "demo_mode": {
+    "enabled": true,
+    "require_validation": true,
+    "min_demo_operations": 10,
+    "min_demo_days": 3,
+    "validation_criteria": {
+      "min_win_rate": 0.6,
+      "max_drawdown_percent": 5.0,
+      "min_total_operations": 50
+    }
+  }
+}
