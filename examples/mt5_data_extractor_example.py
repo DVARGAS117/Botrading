@@ -24,6 +24,8 @@ from src.core.mt5_data_extractor import (
 )
 from src.core.credential_manager import CredentialManager
 from src.core.logger import get_bot_logger, LogConfig
+from src.core.candle_waiter import CandleWaiter
+from src.core.time_validator import TimeValidator
 
 
 def ejemplo_1_extraccion_basica():
@@ -446,6 +448,108 @@ def ejemplo_8_conversion_a_dict():
         connector.disconnect()
 
 
+def ejemplo_9_espera_cierre_vela():
+    """
+    Ejemplo 9: Espera por cierre de vela antes de extraer datos (T37)
+    
+    Demuestra cómo usar CandleWaiter para esperar el cierre de vela
+    antes de extraer datos, garantizando indicadores consistentes.
+    """
+    print("\n" + "="*80)
+    print("EJEMPLO 9: Espera por Cierre de Vela (T37)")
+    print("="*80)
+    
+    try:
+        # Configurar TimeValidator para validación de horarios
+        time_validator = TimeValidator("config/schedule.example.json")
+        
+        # Configurar CandleWaiter para velas M5
+        candle_config = {
+            "candle_wait": {
+                "delay_seconds": 3,  # Espera 3 segundos después del cierre
+                "timeout_seconds": 300,
+                "strict_mode": True
+            }
+        }
+        
+        candle_waiter = CandleWaiter("M5", candle_config, time_validator)
+        
+        print("✓ CandleWaiter configurado para M5")
+        
+        # Mostrar estado actual
+        summary = candle_waiter.get_wait_summary()
+        print(f"\nEstado actual:")
+        print(f"  Timeframe: {summary['timeframe']}")
+        print(f"  Próximo cierre: {summary['next_close_time']}")
+        print(f"  Segundos hasta cierre: {summary['seconds_until_close']}")
+        print(f"  Horario de trading: {summary['is_trading_time']}")
+        
+        # Esperar cierre de vela
+        print(f"\nEsperando cierre de vela M5...")
+        import time
+        start_time = time.time()
+        
+        success = candle_waiter.wait_for_candle_close()
+        
+        elapsed = time.time() - start_time
+        
+        if success:
+            print(f"✅ Vela cerrada exitosamente después de {elapsed:.1f} segundos")
+            
+            # Ahora extraer datos con confianza de que son completos
+            print("\nExtrayendo datos de velas cerradas...")
+            
+            # Configurar broker (usando credenciales de ejemplo)
+            broker_config = BrokerConfig(
+                account_id="51852965",  # Convertir a string
+                password="YourPassword",
+                server="Pepperstone-Demo",
+                timeout=60000
+            )
+            
+            connector = MT5Connector(broker_config)
+            
+            if connector.verify_connection():
+                print("✓ Conexión MT5 exitosa")
+                
+                # Crear extractor con integración de CandleWaiter
+                extractor = MT5DataExtractor(
+                    connector,
+                    candle_waiter=candle_waiter  # Integración opcional
+                )
+                
+                # Extraer datos con wait_for_close=True (usando la integración)
+                data = extractor.get_ohlcv(
+                    symbol="EURUSD",
+                    timeframe=Timeframe.M5,
+                    count=10,
+                    wait_for_close=True  # ← Esta es la funcionalidad clave de T37
+                )
+                
+                print(f"\n✅ Extraídas {data.count} velas CERRADAS de {data.symbol}")
+                print(f"   Última vela: {data.data.iloc[-1]['time']}")
+                print(f"   Close: {data.data.iloc[-1]['close']:.5f}")
+                print(f"\n   ✅ Indicadores calculados con datos consistentes!")
+                
+            else:
+                print("✗ No se pudo conectar a MT5")
+                
+            connector.disconnect()
+            
+        else:
+            print(f"❌ Espera fallida después de {elapsed:.1f} segundos")
+            print("   Posibles causas:")
+            print("   - Fuera de horario de trading")
+            print("   - Timeout excedido")
+            print("   - Error en TimeValidator")
+    
+    except FileNotFoundError:
+        print("✗ Archivos de configuración no encontrados")
+        print("   Asegúrese de tener config/schedule.example.json")
+    except Exception as e:
+        print(f"✗ Error: {e}")
+
+
 def menu_principal():
     """Menú principal de ejemplos"""
     ejemplos = {
@@ -457,6 +561,7 @@ def menu_principal():
         '6': ejemplo_6_con_cache,
         '7': ejemplo_7_con_credential_manager,
         '8': ejemplo_8_conversion_a_dict,
+        '9': ejemplo_9_espera_cierre_vela,
     }
     
     print("\n" + "="*80)
@@ -471,6 +576,7 @@ def menu_principal():
     print("  6. Uso de caché para optimización")
     print("  7. Integración con CredentialManager")
     print("  8. Conversión de datos a diccionario/JSON")
+    print("  9. Espera por cierre de vela (T37)")
     print("\n  0. Salir")
     print("  A. Ejecutar todos los ejemplos")
     print("\n" + "="*80)
@@ -482,7 +588,7 @@ def menu_principal():
             print("\n¡Hasta luego!")
             break
         elif opcion == 'A':
-            for i in range(1, 9):
+            for i in range(1, 10):
                 ejemplos[str(i)]()
             print("\n" + "="*80)
             print("  TODOS LOS EJEMPLOS COMPLETADOS")
