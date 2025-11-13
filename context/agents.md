@@ -21,6 +21,7 @@ REGLAS DEL AGENTE:
 
 ESTA SECUENCIA DE PASOS DEBE EJECUTARSE AL TERMINAR UNA TAREA Y ANTES DE LA FUSIÓN FINAL. NO SE PERMITE FUSIÓN DIRECTA.
 
+0.  **SELECCIÓN Y MARCAJE:** Antes de cualquier acción, **actualiza el estado del Issue seleccionado a "En Proceso" o "In Progress"** en GitHub CLI. Si el issue ya está en este estado, revierte la selección y pasa al siguiente issue de mayor prioridad.
 1.  **FINALIZAR Y RESPALDAR:** Haz un commit local final en tu rama (`ticket-N`) con el trabajo completo y **respalda la rama antes de la integración**: `git push origin ticket-N`
 2.  **SINCRONIZAR `desarrollo`:**
     * `git checkout desarrollo`
@@ -40,3 +41,4 @@ ESTA SECUENCIA DE PASOS DEBE EJECUTARSE AL TERMINAR UNA TAREA Y ANTES DE LA FUSI
     * `git push origin ticket-N`
     * **LIMPIEZA:** Elimina la rama local y remota: `git branch -d ticket-N` y `git push origin --delete ticket-N`
 10. **FALLO EN ESTABILIDAD:** Si las pruebas en `desarrollo` fallan, **revierte la fusión con `git revert` y notifica**.
+11. **VERIFICACIÓN HUMANA:** Si la integración es exitosa (pasos 1 a 10 completos), **DEBES SOLICITAR CONSENTIMIENTO EXPLÍCITO** al usuario antes de cerrar el *ticket* en GitHub CLI. La tarea solo se marca como cerrada tras la confirmación del usuario.
