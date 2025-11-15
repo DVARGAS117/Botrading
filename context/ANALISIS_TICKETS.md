@@ -116,7 +116,7 @@ Estos tickets están correctamente abiertos (no hay tests ni documentación):
 | T27 | #43 | Decisión SL/TP | 🔴 OPEN | Sin evidencia |
 | T28 | #44 | Trazabilidad reevaluación | 🔴 OPEN | Sin evidencia |
 | T32 | #48 | Persistencia operaciones | 🔴 OPEN | Sin evidencia |
-| T33 | #49 | Registro consultas IA | 🔴 OPEN | Sin evidencia |
+| T33 | #49 | Registro consultas IA | ✅ CLOSED | ia_query_repository.py + 33 tests |
 | T34 | #50 | Consolidación métricas | 🔴 OPEN | Sin evidencia |
 | T42 | #58 | Comparación metodologías | 🔴 OPEN | Sin evidencia |
 | T50 | #66 | Avance por fases | 🔴 OPEN | Sin evidencia |
