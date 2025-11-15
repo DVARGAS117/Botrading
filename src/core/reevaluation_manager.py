@@ -28,6 +28,9 @@ from datetime import datetime
 import logging
 import uuid
 
+# Importar ReevaluationTracker para trazabilidad (T28)
+from src.core.reevaluation_tracker import ReevaluationTracker, ReevaluationAction
+
 
 class ReevaluationManagerError(Exception):
     """Excepción personalizada para errores del manager"""
@@ -165,7 +168,9 @@ class ReevaluationManager:
         gemini_client,
         response_parser,
         position_manager,
-        mode: ReevaluationMode = ReevaluationMode.PERSISTENT_CONVERSATION
+        mode: ReevaluationMode = ReevaluationMode.PERSISTENT_CONVERSATION,
+        tracker: Optional[ReevaluationTracker] = None,
+        tracker_storage_dir: str = "data/reevaluations"
     ):
         """
         Inicializa el manager
@@ -178,6 +183,8 @@ class ReevaluationManager:
             response_parser: Parser de respuestas de IA
             position_manager: Gestor de posiciones
             mode: Modo de reevaluación (persistent/new)
+            tracker: ReevaluationTracker opcional (si None, se crea uno)
+            tracker_storage_dir: Directorio para almacenar trazabilidad
         """
         self.mt5_connector = mt5_connector
         self.data_extractor = data_extractor
@@ -187,13 +194,19 @@ class ReevaluationManager:
         self.position_manager = position_manager
         self.mode = mode
         
+        # Inicializar tracker de trazabilidad (T28)
+        if tracker is None:
+            self.tracker = ReevaluationTracker(storage_dir=tracker_storage_dir)
+        else:
+            self.tracker = tracker
+        
         # Diccionario de sesiones de conversación (solo para modo persistente)
         # position_id -> conversation_id
         self.conversation_sessions: Dict[str, str] = {}
         
         self.logger = logging.getLogger(__name__)
         self.logger.info(
-            f"ReevaluationManager inicializado en modo: {mode.value}"
+            f"ReevaluationManager inicializado en modo: {mode.value} con trazabilidad"
         )
     
     async def reevaluate_positions(
@@ -322,6 +335,18 @@ class ReevaluationManager:
             # 6. Ejecutar acción según decisión
             action_success = self._execute_action(context, parsed_decision)
             
+            # 7. Convertir AIDecisionType a ReevaluationAction para tracking
+            action_for_tracking = self._map_decision_to_action(parsed_decision.decision_type)
+            
+            # 8. Registrar trazabilidad (T28)
+            self._register_reevaluation_tracking(
+                context=context,
+                action=action_for_tracking,
+                parsed_decision=parsed_decision,
+                ai_response=ai_response,
+                action_success=action_success
+            )
+            
             if not action_success:
                 return ReevaluationResult(
                     success=False,
@@ -332,7 +357,7 @@ class ReevaluationManager:
                     cost=ai_response.cost
                 )
             
-            # 7. Retornar resultado exitoso
+            # 9. Retornar resultado exitoso
             return ReevaluationResult(
                 success=True,
                 action_taken=parsed_decision.decision_type.value,
@@ -483,6 +508,76 @@ class ReevaluationManager:
         count = len(self.conversation_sessions)
         self.conversation_sessions.clear()
         self.logger.info(f"{count} conversaciones limpiadas")
+    
+    def _map_decision_to_action(self, decision_type) -> ReevaluationAction:
+        """
+        Mapea AIDecisionType a ReevaluationAction para tracking
+        
+        Args:
+            decision_type: Tipo de decisión de IA
+            
+        Returns:
+            ReevaluationAction correspondiente
+        """
+        from src.core.ai_response_parser import AIDecisionType
+        
+        mapping = {
+            AIDecisionType.MANTENER: ReevaluationAction.MANTENER,
+            AIDecisionType.ACTUALIZAR: ReevaluationAction.ACTUALIZAR,
+            AIDecisionType.CERRAR: ReevaluationAction.CERRAR
+        }
+        
+        return mapping.get(decision_type, ReevaluationAction.MANTENER)
+    
+    def _register_reevaluation_tracking(
+        self,
+        context: ReevaluationContext,
+        action: ReevaluationAction,
+        parsed_decision,
+        ai_response,
+        action_success: bool
+    ):
+        """
+        Registra la trazabilidad de una reevaluación (T28)
+        
+        Args:
+            context: Contexto de la reevaluación
+            action: Acción tomada
+            parsed_decision: Decisión parseada de la IA
+            ai_response: Respuesta de la IA con tokens y costo
+            action_success: Si la acción se ejecutó exitosamente
+        """
+        try:
+            self.tracker.register(
+                position_id=context.position_id,
+                symbol=context.symbol,
+                action=action,
+                current_price=context.current_price,
+                profit_pips=context.profit_pips,
+                reasoning=parsed_decision.reasoning,
+                new_sl=getattr(parsed_decision, 'new_stop_loss', None),
+                new_tp=getattr(parsed_decision, 'new_take_profit', None),
+                conversation_id=context.conversation_id,
+                reevaluation_mode=self.mode.value,
+                tokens_input=ai_response.tokens_input,
+                tokens_output=ai_response.tokens_output,
+                cost=ai_response.cost,
+                reevaluation_count=context.reevaluation_count,
+                time_since_last=0  # TODO: calcular tiempo real desde última reevaluación
+            )
+            
+            self.logger.debug(
+                f"Trazabilidad registrada para {context.position_id}: "
+                f"{action.value} - Tokens: {ai_response.tokens_input}/"
+                f"{ai_response.tokens_output} - Costo: ${ai_response.cost:.4f}"
+            )
+            
+        except Exception as e:
+            # No fallar la reevaluación si falla el tracking
+            self.logger.error(
+                f"Error registrando trazabilidad: {e}",
+                exc_info=True
+            )
     
     def get_stats(self) -> Dict:
         """

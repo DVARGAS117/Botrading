@@ -250,6 +250,10 @@ class GeminiClient:
             "total_cost": 0.0,
             "total_latency": 0.0
         }
+        
+        # Diccionario de sesiones de conversación activas
+        # conversation_id -> ChatSession
+        self._conversation_sessions: Dict[str, Any] = {}
     
     def _initialize_model(self) -> None:
         """Inicializa el modelo de Gemini con la configuración"""
@@ -358,7 +362,8 @@ class GeminiClient:
     def send_prompt(
         self,
         prompt: str,
-        image_paths: Optional[List[str]] = None
+        image_paths: Optional[List[str]] = None,
+        conversation_id: Optional[str] = None
     ) -> GeminiResponse:
         """
         Envía un prompt a la API de Gemini con reintentos automáticos
@@ -366,12 +371,19 @@ class GeminiClient:
         Args:
             prompt: Texto del prompt
             image_paths: Lista opcional de rutas a imágenes
+            conversation_id: ID opcional de conversación para mantener contexto
             
         Returns:
             GeminiResponse con el resultado
             
         Raises:
             GeminiClientError: Si el prompt está vacío
+            
+        Note:
+            Si se proporciona conversation_id, el prompt se enviará dentro de esa
+            conversación manteniendo el historial. Si no existe la conversación,
+            se creará automáticamente. Si conversation_id es None, se enviará
+            como prompt individual sin contexto.
         """
         # Validar prompt
         if not prompt or not prompt.strip():
@@ -410,11 +422,22 @@ class GeminiClient:
                 
                 # Generar contenido
                 generation_config = self._get_generation_config()
-                response = self.model.generate_content(
-                    content,
-                    generation_config=generation_config,
-                    request_options={'timeout': self.config.timeout}
-                )
+                
+                # Decidir si usar conversación o envío directo
+                if conversation_id is not None:
+                    # Usar conversación para mantener contexto
+                    chat_session = self.get_conversation(conversation_id)
+                    response = chat_session.send_message(
+                        content,
+                        generation_config=generation_config
+                    )
+                else:
+                    # Envío directo sin contexto
+                    response = self.model.generate_content(
+                        content,
+                        generation_config=generation_config,
+                        request_options={'timeout': self.config.timeout}
+                    )
                 
                 latency = time.time() - start_time
                 
@@ -581,3 +604,165 @@ class GeminiClient:
             f"Tarifas actualizadas: input=${cost_per_1k_input}/1K, "
             f"output=${cost_per_1k_output}/1K"
         )
+    
+    # ========================================================================
+    # Métodos de Gestión de Conversaciones (T28)
+    # ========================================================================
+    
+    def create_conversation(self, conversation_id: str) -> Any:
+        """
+        Crea una nueva sesión de conversación
+        
+        Args:
+            conversation_id: Identificador único de la conversación
+            
+        Returns:
+            ChatSession creada
+            
+        Raises:
+            GeminiClientError: Si hay error al crear la sesión
+            ValueError: Si conversation_id está vacío o ya existe
+        """
+        if not conversation_id or not conversation_id.strip():
+            raise ValueError("conversation_id no puede estar vacío")
+        
+        if conversation_id in self._conversation_sessions:
+            raise ValueError(
+                f"La conversación '{conversation_id}' ya existe. "
+                "Usa get_conversation() para obtenerla o clear_conversation() para eliminarla."
+            )
+        
+        try:
+            # Crear nueva sesión de chat
+            chat_session = self.model.start_chat(history=[])
+            self._conversation_sessions[conversation_id] = chat_session
+            
+            self.logger.info(f"Sesión de conversación creada: {conversation_id}")
+            return chat_session
+            
+        except Exception as e:
+            raise GeminiClientError(
+                f"Error creando sesión de chat para '{conversation_id}': {str(e)}"
+            )
+    
+    def get_conversation(self, conversation_id: str) -> Any:
+        """
+        Obtiene una conversación existente o crea una nueva si no existe
+        
+        Args:
+            conversation_id: Identificador de la conversación
+            
+        Returns:
+            ChatSession correspondiente
+            
+        Raises:
+            GeminiClientError: Si hay error al obtener/crear la sesión
+        """
+        if not conversation_id or not conversation_id.strip():
+            raise ValueError("conversation_id no puede estar vacío")
+        
+        # Si existe, retornarla
+        if conversation_id in self._conversation_sessions:
+            return self._conversation_sessions[conversation_id]
+        
+        # Si no existe, crearla
+        self.logger.debug(
+            f"Conversación '{conversation_id}' no existe. Creando nueva..."
+        )
+        return self.create_conversation(conversation_id)
+    
+    def clear_conversation(self, conversation_id: str) -> bool:
+        """
+        Elimina una conversación específica
+        
+        Args:
+            conversation_id: Identificador de la conversación
+            
+        Returns:
+            True si se eliminó, False si no existía
+        """
+        if conversation_id in self._conversation_sessions:
+            del self._conversation_sessions[conversation_id]
+            self.logger.info(f"Conversación '{conversation_id}' eliminada")
+            return True
+        else:
+            self.logger.warning(
+                f"Intento de eliminar conversación inexistente: '{conversation_id}'"
+            )
+            return False
+    
+    def clear_all_conversations(self) -> int:
+        """
+        Elimina todas las conversaciones activas
+        
+        Returns:
+            Número de conversaciones eliminadas
+        """
+        count = len(self._conversation_sessions)
+        self._conversation_sessions.clear()
+        self.logger.info(f"Todas las conversaciones eliminadas ({count} en total)")
+        return count
+    
+    def get_conversation_history(self, conversation_id: str) -> List[Dict[str, Any]]:
+        """
+        Obtiene el historial de una conversación
+        
+        Args:
+            conversation_id: Identificador de la conversación
+            
+        Returns:
+            Lista de mensajes en formato dict con 'role' y 'content'
+            Retorna lista vacía si la conversación no existe
+        """
+        if conversation_id not in self._conversation_sessions:
+            self.logger.warning(
+                f"Intento de obtener historial de conversación inexistente: '{conversation_id}'"
+            )
+            return []
+        
+        chat_session = self._conversation_sessions[conversation_id]
+        
+        try:
+            # Convertir historial a formato simple
+            history = []
+            for msg in chat_session.history:
+                history.append({
+                    'role': msg.role,
+                    'content': msg.parts[0].text if msg.parts else ""
+                })
+            
+            return history
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error obteniendo historial de '{conversation_id}': {e}",
+                exc_info=True
+            )
+            return []
+    
+    def get_conversation_stats(self) -> Dict[str, Any]:
+        """
+        Obtiene estadísticas de conversaciones activas
+        
+        Returns:
+            Diccionario con estadísticas:
+            - active_conversations: Número de conversaciones activas
+            - conversation_ids: Lista de IDs de conversaciones
+        """
+        return {
+            'active_conversations': len(self._conversation_sessions),
+            'conversation_ids': list(self._conversation_sessions.keys())
+        }
+    
+    def has_conversation(self, conversation_id: str) -> bool:
+        """
+        Verifica si existe una conversación
+        
+        Args:
+            conversation_id: Identificador de la conversación
+            
+        Returns:
+            True si existe, False en caso contrario
+        """
+        return conversation_id in self._conversation_sessions
+

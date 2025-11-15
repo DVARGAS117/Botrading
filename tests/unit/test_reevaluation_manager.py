@@ -629,3 +629,289 @@ class TestReevaluationManagerEdgeCases:
         # Debería funcionar después del retry
         # (Esta funcionalidad requeriría implementación de retry en el manager)
         pass
+
+
+class TestReevaluationManagerConversations:
+    """Tests para manejo de conversaciones en ReevaluationManager - T28"""
+    
+    @pytest.fixture
+    def mock_dependencies(self):
+        """Mock de todas las dependencias"""
+        return {
+            'mt5_connector': Mock(),
+            'data_extractor': Mock(),
+            'prompt_builder': Mock(),
+            'gemini_client': AsyncMock(),
+            'response_parser': Mock(),
+            'position_manager': Mock()
+        }
+    
+    @pytest.mark.asyncio
+    async def test_persistent_mode_creates_conversation_id(self, mock_dependencies):
+        """Debe crear conversation_id en modo PERSISTENT"""
+        manager = ReevaluationManager(
+            **mock_dependencies,
+            mode=ReevaluationMode.PERSISTENT_CONVERSATION
+        )
+        
+        context = ReevaluationContext(
+            position_id="pos_123",
+            symbol="EURUSD",
+            magic_number=100101,
+            direction="BUY",
+            entry_price=1.2400,
+            current_sl=1.2350,
+            current_tp=1.2550,
+            current_price=1.2450,
+            profit_pips=50.0
+        )
+        
+        mock_dependencies['data_extractor'].extract_current_data.return_value = {'price': 1.2450}
+        mock_dependencies['prompt_builder'].build_reevaluation_prompt.return_value = "Test prompt"
+        mock_dependencies['gemini_client'].send_prompt.return_value = Mock(
+            success=True,
+            content='{"accion": "MANTENER"}',
+            tokens_input=100,
+            tokens_output=50,
+            cost=0.0015
+        )
+        
+        parsed_decision = Mock()
+        parsed_decision.is_valid = True
+        parsed_decision.decision_type = AIDecisionType.MANTENER
+        parsed_decision.reasoning = "Todo bien"
+        mock_dependencies['response_parser'].parse_reevaluation.return_value = parsed_decision
+        
+        # Reevaluar
+        result = await manager.reevaluate_single_position(context)
+        
+        # Verificar que se creó una conversación
+        assert len(manager.conversation_sessions) == 1
+        assert "pos_123" in manager.conversation_sessions
+        
+        # Verificar que se pasó conversation_id a gemini_client
+        call_args = mock_dependencies['gemini_client'].send_prompt.call_args
+        assert call_args is not None
+        kwargs = call_args[1] if len(call_args) > 1 else call_args.kwargs
+        assert 'conversation_id' in kwargs
+        assert kwargs['conversation_id'] is not None
+    
+    @pytest.mark.asyncio
+    async def test_new_mode_no_conversation_id(self, mock_dependencies):
+        """Debe NO crear conversation_id en modo NEW"""
+        manager = ReevaluationManager(
+            **mock_dependencies,
+            mode=ReevaluationMode.NEW_CONVERSATION
+        )
+        
+        context = ReevaluationContext(
+            position_id="pos_456",
+            symbol="EURUSD",
+            magic_number=100101,
+            direction="BUY",
+            entry_price=1.2400,
+            current_sl=1.2350,
+            current_tp=1.2550,
+            current_price=1.2450,
+            profit_pips=50.0
+        )
+        
+        mock_dependencies['data_extractor'].extract_current_data.return_value = {'price': 1.2450}
+        mock_dependencies['prompt_builder'].build_reevaluation_prompt.return_value = "Test prompt"
+        mock_dependencies['gemini_client'].send_prompt.return_value = Mock(
+            success=True,
+            content='{"accion": "MANTENER"}',
+            tokens_input=100,
+            tokens_output=50,
+            cost=0.0015
+        )
+        
+        parsed_decision = Mock()
+        parsed_decision.is_valid = True
+        parsed_decision.decision_type = AIDecisionType.MANTENER
+        parsed_decision.reasoning = "Todo bien"
+        mock_dependencies['response_parser'].parse_reevaluation.return_value = parsed_decision
+        
+        # Reevaluar
+        result = await manager.reevaluate_single_position(context)
+        
+        # Verificar que NO se creó conversación
+        assert len(manager.conversation_sessions) == 0
+        
+        # Verificar que conversation_id es None
+        call_args = mock_dependencies['gemini_client'].send_prompt.call_args
+        assert call_args is not None
+        kwargs = call_args[1] if len(call_args) > 1 else call_args.kwargs
+        assert 'conversation_id' in kwargs
+        assert kwargs['conversation_id'] is None
+    
+    @pytest.mark.asyncio
+    async def test_persistent_mode_reuses_conversation(self, mock_dependencies):
+        """Debe reutilizar la misma conversación en reevaluaciones subsecuentes"""
+        manager = ReevaluationManager(
+            **mock_dependencies,
+            mode=ReevaluationMode.PERSISTENT_CONVERSATION
+        )
+        
+        context = ReevaluationContext(
+            position_id="pos_789",
+            symbol="EURUSD",
+            magic_number=100101,
+            direction="BUY",
+            entry_price=1.2400,
+            current_sl=1.2350,
+            current_tp=1.2550,
+            current_price=1.2450,
+            profit_pips=50.0
+        )
+        
+        mock_dependencies['data_extractor'].extract_current_data.return_value = {'price': 1.2450}
+        mock_dependencies['prompt_builder'].build_reevaluation_prompt.return_value = "Test prompt"
+        mock_dependencies['gemini_client'].send_prompt.return_value = Mock(
+            success=True,
+            content='{"accion": "MANTENER"}',
+            tokens_input=100,
+            tokens_output=50,
+            cost=0.0015
+        )
+        
+        parsed_decision = Mock()
+        parsed_decision.is_valid = True
+        parsed_decision.decision_type = AIDecisionType.MANTENER
+        parsed_decision.reasoning = "Todo bien"
+        mock_dependencies['response_parser'].parse_reevaluation.return_value = parsed_decision
+        
+        # Primera reevaluación
+        result1 = await manager.reevaluate_single_position(context)
+        first_conv_id = manager.conversation_sessions.get("pos_789")
+        
+        # Segunda reevaluación (misma posición)
+        result2 = await manager.reevaluate_single_position(context)
+        second_conv_id = manager.conversation_sessions.get("pos_789")
+        
+        # Debe ser el mismo conversation_id
+        assert first_conv_id == second_conv_id
+        
+        # Verificar que se llamó 2 veces con el mismo conversation_id
+        assert mock_dependencies['gemini_client'].send_prompt.call_count == 2
+        
+        # Ambas llamadas deben tener el mismo conversation_id
+        calls = mock_dependencies['gemini_client'].send_prompt.call_args_list
+        conv_id_1 = calls[0][1]['conversation_id'] if len(calls[0]) > 1 else calls[0].kwargs.get('conversation_id')
+        conv_id_2 = calls[1][1]['conversation_id'] if len(calls[1]) > 1 else calls[1].kwargs.get('conversation_id')
+        
+        assert conv_id_1 == conv_id_2
+        assert conv_id_1 is not None
+    
+    @pytest.mark.asyncio
+    async def test_conversation_cleared_on_close_position(self, mock_dependencies):
+        """Debe limpiar conversación al cerrar posición en modo PERSISTENT"""
+        manager = ReevaluationManager(
+            **mock_dependencies,
+            mode=ReevaluationMode.PERSISTENT_CONVERSATION
+        )
+        
+        context = ReevaluationContext(
+            position_id="pos_close",
+            symbol="EURUSD",
+            magic_number=100101,
+            direction="BUY",
+            entry_price=1.2400,
+            current_sl=1.2350,
+            current_tp=1.2550,
+            current_price=1.2450,
+            profit_pips=50.0
+        )
+        
+        mock_dependencies['data_extractor'].extract_current_data.return_value = {'price': 1.2450}
+        mock_dependencies['prompt_builder'].build_reevaluation_prompt.return_value = "Test prompt"
+        mock_dependencies['gemini_client'].send_prompt.return_value = Mock(
+            success=True,
+            content='{"accion": "CERRAR"}',
+            tokens_input=100,
+            tokens_output=50,
+            cost=0.0015
+        )
+        
+        parsed_decision = Mock()
+        parsed_decision.is_valid = True
+        parsed_decision.decision_type = AIDecisionType.CERRAR
+        parsed_decision.reasoning = "Señal de salida"
+        mock_dependencies['response_parser'].parse_reevaluation.return_value = parsed_decision
+        mock_dependencies['position_manager'].close_position.return_value = True
+        
+        # Reevaluar (debería cerrar y limpiar conversación)
+        result = await manager.reevaluate_single_position(context)
+        
+        # Verificar que se cerró la posición
+        assert mock_dependencies['position_manager'].close_position.called
+        
+        # Verificar que se limpió la conversación
+        assert len(manager.conversation_sessions) == 0
+        assert "pos_close" not in manager.conversation_sessions
+    
+    def test_clear_conversation_method(self, mock_dependencies):
+        """Debe limpiar conversación específica"""
+        manager = ReevaluationManager(
+            **mock_dependencies,
+            mode=ReevaluationMode.PERSISTENT_CONVERSATION
+        )
+        
+        # Simular conversaciones activas
+        manager.conversation_sessions = {
+            "pos_1": "conv_id_1",
+            "pos_2": "conv_id_2",
+            "pos_3": "conv_id_3"
+        }
+        
+        # Limpiar una conversación
+        manager.clear_conversation("pos_2")
+        
+        # Verificar
+        assert len(manager.conversation_sessions) == 2
+        assert "pos_1" in manager.conversation_sessions
+        assert "pos_2" not in manager.conversation_sessions
+        assert "pos_3" in manager.conversation_sessions
+    
+    def test_clear_all_conversations_method(self, mock_dependencies):
+        """Debe limpiar todas las conversaciones"""
+        manager = ReevaluationManager(
+            **mock_dependencies,
+            mode=ReevaluationMode.PERSISTENT_CONVERSATION
+        )
+        
+        # Simular conversaciones activas
+        manager.conversation_sessions = {
+            "pos_1": "conv_id_1",
+            "pos_2": "conv_id_2",
+            "pos_3": "conv_id_3"
+        }
+        
+        # Limpiar todas
+        manager.clear_all_conversations()
+        
+        # Verificar
+        assert len(manager.conversation_sessions) == 0
+    
+    def test_get_stats_includes_conversations(self, mock_dependencies):
+        """Debe incluir información de conversaciones en stats"""
+        manager = ReevaluationManager(
+            **mock_dependencies,
+            mode=ReevaluationMode.PERSISTENT_CONVERSATION
+        )
+        
+        # Simular conversaciones activas
+        manager.conversation_sessions = {
+            "pos_1": "conv_id_1",
+            "pos_2": "conv_id_2"
+        }
+        
+        # Obtener stats
+        stats = manager.get_stats()
+        
+        # Verificar
+        assert stats['mode'] == 'persistent'
+        assert stats['active_conversations'] == 2
+        assert 'pos_1' in stats['positions_tracked']
+        assert 'pos_2' in stats['positions_tracked']
+

@@ -553,3 +553,250 @@ class TestGeminiClientEdgeCases:
         assert client.config.temperature == 0.3
         assert client.config.max_tokens == 512
         assert client.config.timeout == 45
+
+
+class TestGeminiClientConversations:
+    """Tests para manejo de conversaciones con contexto - T28"""
+    
+    def test_create_conversation_session(self):
+        """Verificar creación de nueva sesión de conversación"""
+        client = GeminiClient(api_key="test_key")
+        
+        conversation_id = "test_conv_123"
+        session = client.create_conversation(conversation_id)
+        
+        assert session is not None
+        assert conversation_id in client._conversation_sessions
+        assert client._conversation_sessions[conversation_id] is session
+    
+    def test_get_existing_conversation(self):
+        """Verificar obtención de conversación existente"""
+        client = GeminiClient(api_key="test_key")
+        
+        conversation_id = "test_conv_456"
+        session1 = client.create_conversation(conversation_id)
+        session2 = client.get_conversation(conversation_id)
+        
+        assert session1 is session2  # Debe ser la misma instancia
+    
+    def test_get_non_existing_conversation_creates_new(self):
+        """Verificar que obtener conversación inexistente crea una nueva"""
+        client = GeminiClient(api_key="test_key")
+        
+        conversation_id = "test_conv_789"
+        session = client.get_conversation(conversation_id)
+        
+        assert session is not None
+        assert conversation_id in client._conversation_sessions
+    
+    def test_send_prompt_with_conversation_id(self):
+        """Verificar envío de prompt dentro de conversación"""
+        client = GeminiClient(api_key="test_key")
+        
+        with patch.object(client, 'model') as mock_model:
+            # Crear mock de chat session
+            mock_chat_session = Mock()
+            mock_response = Mock()
+            mock_response.text = '{"accion": "MANTENER", "razonamiento": "Todo bien"}'
+            mock_response.usage_metadata.prompt_token_count = 150
+            mock_response.usage_metadata.candidates_token_count = 75
+            
+            mock_chat_session.send_message.return_value = mock_response
+            mock_model.start_chat.return_value = mock_chat_session
+            
+            # Enviar primer mensaje en conversación
+            conversation_id = "conv_test_001"
+            response1 = client.send_prompt(
+                "Primera evaluación",
+                conversation_id=conversation_id
+            )
+            
+            assert response1.success is True
+            assert "MANTENER" in response1.content
+            assert conversation_id in client._conversation_sessions
+            
+            # Enviar segundo mensaje en misma conversación
+            response2 = client.send_prompt(
+                "Segunda reevaluación",
+                conversation_id=conversation_id
+            )
+            
+            assert response2.success is True
+            # Verificar que se usó la misma sesión de chat
+            assert mock_chat_session.send_message.call_count == 2
+    
+    def test_send_prompt_without_conversation_id_no_persistence(self):
+        """Verificar que sin conversation_id no se mantiene contexto"""
+        client = GeminiClient(api_key="test_key")
+        
+        with patch.object(client, 'model') as mock_model:
+            mock_response = Mock()
+            mock_response.text = '{"accion": "NO_OPERAR"}'
+            mock_response.usage_metadata.prompt_token_count = 100
+            mock_response.usage_metadata.candidates_token_count = 50
+            
+            mock_model.generate_content.return_value = mock_response
+            
+            # Enviar sin conversation_id
+            response = client.send_prompt("Test prompt")
+            
+            assert response.success is True
+            assert len(client._conversation_sessions) == 0  # No debe crear sesión
+    
+    def test_clear_conversation(self):
+        """Verificar limpieza de conversación específica"""
+        client = GeminiClient(api_key="test_key")
+        
+        # Crear múltiples conversaciones
+        conv_id_1 = "conv_001"
+        conv_id_2 = "conv_002"
+        
+        client.create_conversation(conv_id_1)
+        client.create_conversation(conv_id_2)
+        
+        assert len(client._conversation_sessions) == 2
+        
+        # Limpiar una conversación
+        client.clear_conversation(conv_id_1)
+        
+        assert len(client._conversation_sessions) == 1
+        assert conv_id_1 not in client._conversation_sessions
+        assert conv_id_2 in client._conversation_sessions
+    
+    def test_clear_all_conversations(self):
+        """Verificar limpieza de todas las conversaciones"""
+        client = GeminiClient(api_key="test_key")
+        
+        # Crear múltiples conversaciones
+        client.create_conversation("conv_001")
+        client.create_conversation("conv_002")
+        client.create_conversation("conv_003")
+        
+        assert len(client._conversation_sessions) == 3
+        
+        # Limpiar todas
+        client.clear_all_conversations()
+        
+        assert len(client._conversation_sessions) == 0
+    
+    def test_get_conversation_history(self):
+        """Verificar obtención del historial de una conversación"""
+        client = GeminiClient(api_key="test_key")
+        
+        with patch.object(client, 'model') as mock_model:
+            mock_chat_session = Mock()
+            mock_chat_session.history = [
+                Mock(role="user", parts=[Mock(text="Primera pregunta")]),
+                Mock(role="model", parts=[Mock(text='{"accion": "OPERAR"}')]),
+                Mock(role="user", parts=[Mock(text="Reevaluación")]),
+                Mock(role="model", parts=[Mock(text='{"accion": "MANTENER"}')])
+            ]
+            
+            mock_model.start_chat.return_value = mock_chat_session
+            
+            conversation_id = "conv_history_test"
+            client.create_conversation(conversation_id)
+            
+            # Obtener historial
+            history = client.get_conversation_history(conversation_id)
+            
+            assert history is not None
+            assert len(history) == 4
+            assert history[0]['role'] == 'user'
+            assert history[1]['role'] == 'model'
+    
+    def test_get_conversation_history_non_existing(self):
+        """Verificar que obtener historial de conversación inexistente retorna vacío"""
+        client = GeminiClient(api_key="test_key")
+        
+        history = client.get_conversation_history("non_existing_conv")
+        
+        assert history == []
+    
+    def test_get_active_conversations_stats(self):
+        """Verificar obtención de estadísticas de conversaciones activas"""
+        client = GeminiClient(api_key="test_key")
+        
+        # Crear varias conversaciones
+        client.create_conversation("conv_001")
+        client.create_conversation("conv_002")
+        client.create_conversation("conv_003")
+        
+        stats = client.get_conversation_stats()
+        
+        assert stats['active_conversations'] == 3
+        assert 'conv_001' in stats['conversation_ids']
+        assert 'conv_002' in stats['conversation_ids']
+        assert 'conv_003' in stats['conversation_ids']
+    
+    def test_conversation_error_handling(self):
+        """Verificar manejo de errores en conversaciones"""
+        client = GeminiClient(api_key="test_key")
+        
+        with patch.object(client, 'model') as mock_model:
+            mock_model.start_chat.side_effect = Exception("Chat session error")
+            
+            # Intentar crear conversación con error
+            with pytest.raises(GeminiClientError, match="Error creando sesión de chat"):
+                client.create_conversation("error_conv")
+    
+    def test_send_prompt_with_images_and_conversation(self):
+        """Verificar envío de imágenes dentro de conversación"""
+        client = GeminiClient(api_key="test_key")
+        
+        with patch.object(client, 'model') as mock_model, \
+             patch('PIL.Image.open') as mock_image_open:
+            
+            # Mock imagen
+            mock_image = Mock()
+            mock_image_open.return_value = mock_image
+            
+            # Mock chat session
+            mock_chat_session = Mock()
+            mock_response = Mock()
+            mock_response.text = '{"accion": "OPERAR", "direccion": "BUY"}'
+            mock_response.usage_metadata.prompt_token_count = 200
+            mock_response.usage_metadata.candidates_token_count = 100
+            
+            mock_chat_session.send_message.return_value = mock_response
+            mock_model.start_chat.return_value = mock_chat_session
+            
+            # Crear archivo temporal de imagen
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_img:
+                image_path = tmp_img.name
+            
+            try:
+                conversation_id = "conv_with_images"
+                response = client.send_prompt(
+                    "Analiza esta gráfica",
+                    image_paths=[image_path],
+                    conversation_id=conversation_id
+                )
+                
+                assert response.success is True
+                assert conversation_id in client._conversation_sessions
+            finally:
+                if os.path.exists(image_path):
+                    os.unlink(image_path)
+    
+    def test_conversation_isolation(self):
+        """Verificar que las conversaciones están aisladas entre sí"""
+        client = GeminiClient(api_key="test_key")
+        
+        with patch.object(client, 'model') as mock_model:
+            # Crear dos sesiones de chat separadas
+            mock_chat_1 = Mock()
+            mock_chat_2 = Mock()
+            
+            mock_model.start_chat.side_effect = [mock_chat_1, mock_chat_2]
+            
+            conv_id_1 = "isolated_conv_1"
+            conv_id_2 = "isolated_conv_2"
+            
+            session_1 = client.create_conversation(conv_id_1)
+            session_2 = client.create_conversation(conv_id_2)
+            
+            # Verificar que son instancias diferentes
+            assert session_1 is not session_2
+            assert client._conversation_sessions[conv_id_1] is session_1
+            assert client._conversation_sessions[conv_id_2] is session_2
