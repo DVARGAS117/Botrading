@@ -673,3 +673,10 @@ class IAQueryRepository:
             action_decided=row['accion_decidida'],
             created_at=datetime.fromisoformat(row['created_at']) if row['created_at'] else None
         )
+    
+    def close(self):
+        """Cierra cualquier conexión abierta (compatibilidad con context manager)"""
+        # SQLite cierra automáticamente las conexiones
+        # Este método es para compatibilidad con tests
+        pass
+
