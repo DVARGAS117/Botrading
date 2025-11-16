@@ -1,9 +1,9 @@
 [
   {
-    "position_id": "pos_2",
-    "symbol": "GBPUSD",
-    "action": "MANTENER",
-    "current_price": 1.315,
+    "position_id": "pos_close",
+    "symbol": "EURUSD",
+    "action": "CERRAR",
+    "current_price": 1.245,
     "profit_pips": 50.0,
-    "reasoning": "OK",
+    "reasoning": "Señal de salida",
     "new_sl": 

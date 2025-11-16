@@ -1,0 +1,279 @@
+{
+  "project_name": "Botrading",
+  "description": "Sistema de Trading Automatizado con IA",
+  "phases": [
+    {
+      "phase_number": 0,
+      "name": "Fundamentos",
+      "description": "Configuración inicial del proyecto y componentes base",
+      "priority": "P0",
+      "estimated_duration_sprints": 2,
+      "criteria": [
+        {
+          "id": "P0_001",
+          "description": "Repo + estructura base de carpetas creada",
+          "requirement_type": "critical",
+          "validation_method": "manual"
+        },
+        {
+          "id": "P0_002",
+          "description": "Tests unitarios con cobertura > 80%",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P0_003",
+          "description": "Credenciales configuradas en .env",
+          "requirement_type": "critical",
+          "validation_method": "manual"
+        },
+        {
+          "id": "P0_004",
+          "description": "Sistema de logging funcional",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P0_005",
+          "description": "Módulos core reutilizables implementados",
+          "requirement_type": "critical",
+          "validation_method": "code_review"
+        },
+        {
+          "id": "P0_006",
+          "description": "Documentación de arquitectura completa",
+          "requirement_type": "optional",
+          "validation_method": "manual"
+        }
+      ]
+    },
+    {
+      "phase_number": 1,
+      "name": "Núcleo de Ejecución",
+      "description": "Bot 1 operacional con MT5",
+      "priority": "P0",
+      "estimated_duration_sprints": 3,
+      "criteria": [
+        {
+          "id": "P1_001",
+          "description": "Bot 1 ejecuta ciclos a HH:00 en horario Lima",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P1_002",
+          "description": "Conexión MT5 estable y funcional",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P1_003",
+          "description": "Operaciones abiertas/cerradas correctamente",
+          "requirement_type": "critical",
+          "validation_method": "integration_test"
+        },
+        {
+          "id": "P1_004",
+          "description": "Magic Numbers generándose y decodificándose",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P1_005",
+          "description": "Multi-activo iterando correctamente",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P1_006",
+          "description": "Reintentos automáticos con backoff funcionando",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P1_007",
+          "description": "Logs estructurados por bot y nivel",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P1_008",
+          "description": "Filtros de horario y días hábiles aplicándose",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        }
+      ]
+    },
+    {
+      "phase_number": 2,
+      "name": "IA y Estrategias",
+      "description": "Integración con Gemini y estrategia Dual Market/Limit",
+      "priority": "P0",
+      "estimated_duration_sprints": 4,
+      "criteria": [
+        {
+          "id": "P2_001",
+          "description": "Gemini responde con JSON válido",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P2_002",
+          "description": "Pares Market/Limit se abren simultáneamente",
+          "requirement_type": "critical",
+          "validation_method": "integration_test"
+        },
+        {
+          "id": "P2_003",
+          "description": "Reevaluación ejecutándose cada 10 minutos",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P2_004",
+          "description": "Indicadores calculándose correctamente (EMA, RSI, MACD)",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P2_005",
+          "description": "Cálculo de lote por % riesgo funcionando",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P2_006",
+          "description": "Bot operando en demo sin pérdidas críticas",
+          "requirement_type": "critical",
+          "validation_method": "manual"
+        },
+        {
+          "id": "P2_007",
+          "description": "Tokens y costos de IA registrándose",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P2_008",
+          "description": "Contexto conversacional manteniéndose en reevaluaciones",
+          "requirement_type": "optional",
+          "validation_method": "manual"
+        }
+      ]
+    },
+    {
+      "phase_number": 3,
+      "name": "Análisis y Persistencia",
+      "description": "Dashboard de métricas y base de datos SQLite",
+      "priority": "P0",
+      "estimated_duration_sprints": 2,
+      "criteria": [
+        {
+          "id": "P3_001",
+          "description": "SQLite almacena datos sin pérdidas",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P3_002",
+          "description": "Dashboard con métricas diarias operativo",
+          "requirement_type": "critical",
+          "validation_method": "manual"
+        },
+        {
+          "id": "P3_003",
+          "description": "Análisis comparativo Market vs Limit disponible",
+          "requirement_type": "critical",
+          "validation_method": "manual"
+        },
+        {
+          "id": "P3_004",
+          "description": "Consultas a IA registradas con prompts y respuestas",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P3_005",
+          "description": "Métricas: Winrate, Profit Factor calculándose",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P3_006",
+          "description": "Monitoreo de estado y logs por bot funcional",
+          "requirement_type": "optional",
+          "validation_method": "manual"
+        }
+      ]
+    },
+    {
+      "phase_number": 4,
+      "name": "Escalabilidad y Calidad",
+      "description": "Múltiples bots en producción",
+      "priority": "P0",
+      "estimated_duration_sprints": 2,
+      "criteria": [
+        {
+          "id": "P4_001",
+          "description": "Bots 2-5 operando en paralelo",
+          "requirement_type": "critical",
+          "validation_method": "integration_test"
+        },
+        {
+          "id": "P4_002",
+          "description": "Tests E2E pasando exitosamente",
+          "requirement_type": "critical",
+          "validation_method": "automated"
+        },
+        {
+          "id": "P4_003",
+          "description": "Documentación completa y actualizada",
+          "requirement_type": "critical",
+          "validation_method": "manual"
+        },
+        {
+          "id": "P4_004",
+          "description": "Sistema validado en demo durante 2 semanas mínimo",
+          "requirement_type": "critical",
+          "validation_method": "manual"
+        },
+        {
+          "id": "P4_005",
+          "description": "Migración a producción completada",
+          "requirement_type": "critical",
+          "validation_method": "manual"
+        },
+        {
+          "id": "P4_006",
+          "description": "Plan de contingencia y rollback documentado",
+          "requirement_type": "optional",
+          "validation_method": "manual"
+        }
+      ]
+    }
+  ],
+  "phase_dependencies": [
+    {
+      "phase": 1,
+      "depends_on": [0]
+    },
+    {
+      "phase": 2,
+      "depends_on": [0, 1]
+    },
+    {
+      "phase": 3,
+      "depends_on": [0, 1, 2]
+    },
+    {
+      "phase": 4,
+      "depends_on": [0, 1, 2, 3]
+    }
+  ],
+  "validation_rules": {
+    "allow_skip_optional": true,
+    "require_all_critical": true,
+    "allow_parallel_phases": false,
+    "require_phase_order": true
+  }
+}
