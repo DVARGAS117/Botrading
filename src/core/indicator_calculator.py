@@ -62,6 +62,10 @@ class IndicatorData:
     vwap_lower_1: Optional[float] = None
     vwap_upper_2: Optional[float] = None
     vwap_lower_2: Optional[float] = None
+    
+    # ATR Indicators (Average True Range)
+    atr_14: Optional[float] = None
+    atr_21: Optional[float] = None
 
 
 @dataclass
@@ -253,6 +257,51 @@ class IndicatorCalculator:
             'lower_2': vwap - 2 * std_dev
         }
     
+    def _calculate_atr(self, data: pd.DataFrame, period: int = 14) -> pd.Series:
+        """
+        Calcula ATR (Average True Range) según fórmula de Wilder.
+        
+        ATR mide volatilidad usando el True Range:
+        TR = max(high - low, |high - prev_close|, |low - prev_close|)
+        ATR = EMA suavizada de TR (Wilder's smoothing)
+        
+        Args:
+            data: DataFrame con columnas 'high', 'low', 'close'
+            period: Período para ATR (default: 14)
+        
+        Returns:
+            Serie con ATR calculado
+        """
+        # Calcular True Range
+        high_low = data['high'] - data['low']
+        high_close = (data['high'] - data['close'].shift(1)).abs()
+        low_close = (data['low'] - data['close'].shift(1)).abs()
+        
+        # True Range es el máximo de los tres componentes
+        true_range = pd.DataFrame({
+            'hl': high_low,
+            'hc': high_close,
+            'lc': low_close
+        }).max(axis=1)
+        
+        # Calcular ATR con método de Wilder (EMA modificada)
+        # Wilder's smoothing: ATR = (ATR_prev * (n-1) + TR) / n
+        atr = pd.Series(index=data.index, dtype=float)
+        
+        # Validar que hay suficientes datos
+        if len(data) < period:
+            # Si no hay suficientes datos, retornar serie con NaN
+            return atr
+        
+        # Primer ATR es el promedio simple del período inicial
+        atr.iloc[period - 1] = true_range.iloc[:period].mean()
+        
+        # Suavizado de Wilder para los valores subsecuentes
+        for i in range(period, len(data)):
+            atr.iloc[i] = (atr.iloc[i - 1] * (period - 1) + true_range.iloc[i]) / period
+        
+        return atr
+    
     def _calculate_volume_average(self, volume: pd.Series, period: int = 20) -> pd.Series:
         """
         Calcula el promedio móvil de volumen.
@@ -297,6 +346,10 @@ class IndicatorCalculator:
         vwap = self._calculate_vwap(ohlcv_data.data)
         vwap_slope, vwap_slope_desc = self._calculate_vwap_slope(vwap, lookback=10)
         vwap_bands = self._calculate_vwap_bands(ohlcv_data.data, vwap)
+        
+        # Calcular ATR (Average True Range)
+        atr_14 = self._calculate_atr(ohlcv_data.data, period=14)
+        atr_21 = self._calculate_atr(ohlcv_data.data, period=21)
 
         # Obtener los últimos valores válidos
         latest_ema9 = ema9.dropna().iloc[-1] if not ema9.dropna().empty else None
@@ -314,6 +367,10 @@ class IndicatorCalculator:
         latest_vwap_lower_1 = vwap_bands['lower_1'].dropna().iloc[-1] if not vwap_bands['lower_1'].dropna().empty else None
         latest_vwap_upper_2 = vwap_bands['upper_2'].dropna().iloc[-1] if not vwap_bands['upper_2'].dropna().empty else None
         latest_vwap_lower_2 = vwap_bands['lower_2'].dropna().iloc[-1] if not vwap_bands['lower_2'].dropna().empty else None
+        
+        # ATR últimos valores
+        latest_atr_14 = atr_14.dropna().iloc[-1] if not atr_14.dropna().empty else None
+        latest_atr_21 = atr_21.dropna().iloc[-1] if not atr_21.dropna().empty else None
 
         return IndicatorData(
             symbol=ohlcv_data.symbol,
@@ -332,7 +389,9 @@ class IndicatorCalculator:
             vwap_upper_1=latest_vwap_upper_1,
             vwap_lower_1=latest_vwap_lower_1,
             vwap_upper_2=latest_vwap_upper_2,
-            vwap_lower_2=latest_vwap_lower_2
+            vwap_lower_2=latest_vwap_lower_2,
+            atr_14=latest_atr_14,
+            atr_21=latest_atr_21
         )
 
     def calculate_indicators_multi_timeframe(self,
@@ -403,7 +462,9 @@ class IndicatorCalculator:
                         "lower_1": indicator_data.vwap_lower_1,
                         "upper_2": indicator_data.vwap_upper_2,
                         "lower_2": indicator_data.vwap_lower_2
-                    }
+                    },
+                    "atr_14": indicator_data.atr_14,
+                    "atr_21": indicator_data.atr_21
                 }
             }
 
