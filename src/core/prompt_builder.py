@@ -29,6 +29,8 @@ from datetime import datetime
 import logging
 import json
 
+from src.core.vwap_prompt_builder import VWAPPromptBuilder
+
 
 class PromptBuilderError(Exception):
     """Excepción personalizada para errores de construcción de prompts"""
@@ -666,3 +668,56 @@ Para REEVALUACIÓN, usa uno de estos formatos:
             prompt += "\n\n" + self.JSON_FORMAT_INSTRUCTIONS
         
         return prompt
+    
+    def build_vwap_methodology_prompt(
+        self,
+        indicators: Dict,
+        or_data: Optional[Any],
+        market_context: Any
+    ) -> tuple[str, str]:
+        """
+        Construye prompts usando VWAP Methodology específica.
+        
+        Este método delega la construcción al VWAPPromptBuilder especializado,
+        que implementa la metodología VWAP trend-following completa.
+        
+        Args:
+            indicators: Diccionario de indicadores por timeframe (desde IndicatorCalculator)
+            or_data: Datos del Opening Range (desde OpeningRangeCalculator)
+            market_context: Contexto de mercado (Enum MarketContext)
+            
+        Returns:
+            tuple: (system_prompt, user_prompt)
+            
+        Raises:
+            PromptBuilderError: Si faltan datos requeridos
+        
+        Example:
+            ```python
+            from src.core.vwap_prompt_builder import MarketContext
+            from src.core.mt5_data_extractor import Timeframe
+            
+            builder = PromptBuilder()
+            
+            # indicators es un Dict[Timeframe, IndicatorData]
+            system_prompt, user_prompt = builder.build_vwap_methodology_prompt(
+                indicators=indicators,  # Resultado de IndicatorCalculator
+                or_data=or_data,        # Resultado de OpeningRangeCalculator
+                market_context=MarketContext.EUROPEAN_SESSION
+            )
+            ```
+        """
+        # Crear instancia de VWAPPromptBuilder
+        vwap_builder = VWAPPromptBuilder()
+        
+        # Construir system prompt (fijo)
+        system_prompt = vwap_builder.build_system_prompt()
+        
+        # Construir user prompt (variable)
+        user_prompt = vwap_builder.build_user_prompt(
+            indicators=indicators,
+            or_data=or_data,
+            market_context=market_context
+        )
+        
+        return system_prompt, user_prompt

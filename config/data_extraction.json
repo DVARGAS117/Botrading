@@ -1,0 +1,165 @@
+{
+    "_description": "Configuración de extracción de datos de MT5 para cálculo preciso de indicadores",
+    "_version": "1.0",
+    "_last_updated": "2025-11-17",
+    "timeframes": {
+        "M1": {
+            "default_count": 200,
+            "min_required": 50,
+            "description": "200 velas para análisis micro de sesión (3.3 horas)",
+            "use_cases": [
+                "Timing preciso de entradas",
+                "Análisis de micro-estructura",
+                "VWAP intraday de alta resolución"
+            ]
+        },
+        "M5": {
+            "default_count": 100,
+            "min_required": 50,
+            "description": "100 velas = ~8.3 horas de datos para indicadores precisos",
+            "use_cases": [
+                "Timeframe principal para señales",
+                "Cálculo de EMA50 con buffer adecuado",
+                "ATR de sesión completa",
+                "VWAP de sesión con contexto"
+            ],
+            "notes": "Con 100 velas, EMA50 tiene 50 períodos de buffer para estabilización"
+        },
+        "M15": {
+            "default_count": 100,
+            "min_required": 50,
+            "description": "100 velas = ~25 horas para contexto amplio",
+            "use_cases": [
+                "Contexto de tendencia intradía",
+                "Confirmación de señales M5",
+                "Niveles de soporte/resistencia de corto plazo"
+            ]
+        },
+        "H1": {
+            "default_count": 50,
+            "min_required": 30,
+            "description": "50 velas = ~2 días de contexto de mercado",
+            "use_cases": [
+                "Tendencia de mediano plazo",
+                "Contexto macro para decisiones intradía",
+                "Niveles clave diarios/semanales"
+            ]
+        }
+    },
+    "indicators_requirements": {
+        "EMA_9": {
+            "min_periods": 9,
+            "recommended_buffer": 20,
+            "total_recommended": 30,
+            "reason": "EMA rápida requiere pocos datos pero buffer ayuda con estabilidad"
+        },
+        "EMA_50": {
+            "min_periods": 50,
+            "recommended_buffer": 50,
+            "total_recommended": 100,
+            "reason": "EMA lenta requiere al menos 50 períodos, buffer 2x para precisión óptima"
+        },
+        "ATR_14": {
+            "min_periods": 14,
+            "recommended_buffer": 36,
+            "total_recommended": 50,
+            "reason": "ATR requiere historia de volatilidad, buffer permite suavizado Wilder adecuado"
+        },
+        "ATR_21": {
+            "min_periods": 21,
+            "recommended_buffer": 29,
+            "total_recommended": 50,
+            "reason": "Período más largo requiere más datos históricos de rango verdadero"
+        },
+        "VWAP": {
+            "min_periods": "session_based",
+            "recommended_buffer": 20,
+            "total_recommended": 100,
+            "reason": "VWAP se ancla a inicio de sesión, necesita todas las velas de sesión + pre-market"
+        },
+        "VWAP_SLOPE": {
+            "min_periods": 10,
+            "recommended_buffer": 40,
+            "total_recommended": 50,
+            "reason": "Pendiente VWAP usa lookback de 10 períodos, necesita VWAP establecido"
+        },
+        "VWAP_BANDS": {
+            "min_periods": 20,
+            "recommended_buffer": 30,
+            "total_recommended": 50,
+            "reason": "Bandas usan desviación estándar ponderada por volumen, requiere datos estables"
+        },
+        "OPENING_RANGE": {
+            "min_periods": "time_based",
+            "recommended_buffer": 0,
+            "total_recommended": "session_data",
+            "reason": "OR se calcula de 08:00-08:30 GMT, requiere datos desde inicio de sesión"
+        }
+    },
+    "vwap_methodology_specific": {
+        "session_definition": {
+            "start_gmt": "08:00",
+            "end_gmt": "13:00",
+            "duration_hours": 5,
+            "description": "Sesión europea de trading VWAP"
+        },
+        "timeframe_usage": {
+            "M5": {
+                "extraction": "session_complete",
+                "count_calculation": "5h * 12 velas/hora = 60 velas mínimo, 100 recomendado con pre-market",
+                "purpose": "Timeframe principal para señales y gestión"
+            },
+            "M1": {
+                "extraction": "last_200_candles",
+                "count_calculation": "200 velas = 3.3 horas de datos micro",
+                "purpose": "Timing preciso de entradas y análisis de micro-estructura"
+            },
+            "H1": {
+                "extraction": "last_30_to_50_candles",
+                "count_calculation": "30-50 velas = 1-2 días de contexto",
+                "purpose": "Contexto de tendencia y niveles clave"
+            }
+        },
+        "data_collection_strategy": {
+            "principle": "INDICADORES SIEMPRE PRECISOS - Si indicador necesita 100 velas, extraer 100 velas",
+            "never_compromise": "Nunca ajustar requerimientos de indicador por falta de datos",
+            "buffer_philosophy": "Usar buffer 2x del mínimo cuando sea posible para máxima precisión",
+            "validation": "indicator_calculator.py valida mínimo 50 velas antes de calcular"
+        }
+    },
+    "production_guidelines": {
+        "best_practices": [
+            "SIEMPRE usar default_count de esta configuración, no valores hardcodeados",
+            "Validar que extractor.get_ohlcv() reciba count >= min_required",
+            "Para VWAP methodology, usar valores de vwap_methodology_specific",
+            "En caso de duda, más datos es mejor que menos datos",
+            "Validar count antes de pasar a indicator_calculator"
+        ],
+        "error_handling": [
+            "Si MT5 devuelve menos velas que min_required, lanzar error claro",
+            "No intentar calcular indicadores con datos insuficientes",
+            "Loggear warning si count < recommended pero >= min_required",
+            "En producción, preferir rechazar señal que usar indicadores imprecisos"
+        ],
+        "performance_considerations": [
+            "100 velas M5 = ~100 KB de datos, negligible en RAM",
+            "200 velas M1 = ~200 KB de datos, negligible en RAM",
+            "Extracción MT5 de 100-200 velas toma <100ms típicamente",
+            "Costo de datos extra << beneficio de indicadores precisos"
+        ]
+    },
+    "examples": {
+        "correct_usage": {
+            "description": "Ejemplo de uso correcto con valores recomendados",
+            "code": "data = extractor.get_ohlcv('EURUSD', Timeframe.M5, count=100)"
+        },
+        "incorrect_usage": {
+            "description": "EVITAR: Usar valores mínimos sin buffer",
+            "code": "data = extractor.get_ohlcv('EURUSD', Timeframe.M5, count=50)  # ❌ Sin buffer"
+        },
+        "multi_timeframe": {
+            "description": "Extracción multi-timeframe con counts apropiados",
+            "code": "data = extractor.get_ohlcv_multi_timeframe('EURUSD', [Timeframe.M5, Timeframe.M15, Timeframe.H1], count=100)"
+        }
+    }
+}

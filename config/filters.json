@@ -1,0 +1,109 @@
+{
+    "_comment": "Configuración de filtros para el sistema de trading - T36",
+    "_description": "Permite habilitar/deshabilitar filtros sin modificar código",
+    "_version": "1.0",
+    "volatility": {
+        "_description": "Filtro de volatilidad basado en ATR (Average True Range)",
+        "enabled": false,
+        "atr_minimum": 0.001,
+        "_unit": "El ATR mínimo requerido para operar (en valor del activo)",
+        "_example": "0.001 para EURUSD significa 10 pips mínimos de ATR"
+    },
+    "spread": {
+        "_description": "Filtro de spread máximo permitido",
+        "enabled": false,
+        "spread_maximum_pips": 3,
+        "_unit": "Spread máximo en pips",
+        "_example": "3 pips para la mayoría de pares mayores"
+    },
+    "economic_events": {
+        "_description": "Filtro de eventos económicos (futuro)",
+        "enabled": false,
+        "avoid_before_minutes": 30,
+        "avoid_after_minutes": 30,
+        "_note": "Requiere integración con calendario económico"
+    },
+    "drawdown": {
+        "_description": "Filtro de drawdown acumulado (futuro)",
+        "enabled": false,
+        "max_drawdown_percent": 10,
+        "_unit": "Porcentaje de drawdown máximo antes de pausar operaciones",
+        "_example": "10 significa pausar si pérdida acumulada > 10%"
+    },
+    "time_filter": {
+        "_description": "Filtro de horario específico por activo (futuro)",
+        "enabled": false,
+        "asset_specific_hours": {
+            "EURUSD": {
+                "start": "08:00",
+                "end": "12:00"
+            },
+            "GBPUSD": {
+                "start": "09:00",
+                "end": "13:00"
+            }
+        },
+        "_note": "Complementa al TimeValidator (T35) con horarios específicos por activo"
+    },
+    "correlation": {
+        "_description": "Filtro de correlación entre activos (futuro)",
+        "enabled": false,
+        "max_correlation": 0.8,
+        "_unit": "Correlación máxima permitida entre posiciones abiertas",
+        "_example": "0.8 evita abrir EUR/USD y GBP/USD simultáneamente"
+    },
+    "custom": {
+        "_description": "Filtros custom extensibles",
+        "enabled": false,
+        "_note": "Permite agregar filtros personalizados sin modificar código core"
+    },
+    "_examples": [
+        {
+            "_scenario": "Solo filtro de volatilidad habilitado",
+            "volatility": {
+                "enabled": true,
+                "atr_minimum": 0.0015
+            },
+            "spread": {
+                "enabled": false,
+                "spread_maximum_pips": 3
+            }
+        },
+        {
+            "_scenario": "Filtros de volatilidad y spread habilitados",
+            "volatility": {
+                "enabled": true,
+                "atr_minimum": 0.001
+            },
+            "spread": {
+                "enabled": true,
+                "spread_maximum_pips": 2
+            }
+        },
+        {
+            "_scenario": "Todos los filtros deshabilitados (sin filtros adicionales)",
+            "volatility": {
+                "enabled": false,
+                "atr_minimum": 0.001
+            },
+            "spread": {
+                "enabled": false,
+                "spread_maximum_pips": 3
+            }
+        }
+    ],
+    "_usage_guidelines": {
+        "enabling_filters": "Cambia 'enabled' a true para activar un filtro",
+        "disabling_filters": "Cambia 'enabled' a false para desactivar un filtro",
+        "hot_reload": "El sistema puede recargar config sin reiniciar (usar reload_config())",
+        "testing": "Prueba con filtros deshabilitados inicialmente, luego habilita uno por uno",
+        "monitoring": "Usa get_filter_summary() para ver qué filtros están activos",
+        "statistics": "Usa get_filter_statistics() para analizar tasa de paso/fallo"
+    },
+    "_integration": {
+        "time_validator": "Se integra con TimeValidator (T35) para filtro de horario base",
+        "logger": "Registra aplicación de filtros en Logger (T39)",
+        "config_loader": "Carga configuración con ConfigLoader (T44)",
+        "mt5_connector": "Futuro: obtendrá ATR y spread desde MT5"
+    }
+}
