@@ -25,6 +25,7 @@ class IndicatorData:
     Attributes:
         symbol: Símbolo del instrumento
         timeframe: Timeframe de los indicadores
+        ema9: EMA de 9 períodos (timing micro)
         ema20: EMA de 20 períodos
         ema50: EMA de 50 períodos
         rsi: RSI de 14 períodos
@@ -32,16 +33,35 @@ class IndicatorData:
         signal: Línea de señal MACD
         histogram: Histograma MACD
         volume_avg: Promedio de volumen de 20 períodos
+        
+        # Indicadores VWAP (Metodología VWAP Intradía)
+        vwap: VWAP de sesión
+        vwap_slope: Pendiente de VWAP (derivada)
+        vwap_slope_description: Descripción de pendiente (ascendente/descendente/plana)
+        vwap_upper_1: Banda superior +1σ
+        vwap_lower_1: Banda inferior -1σ
+        vwap_upper_2: Banda superior +2σ
+        vwap_lower_2: Banda inferior -2σ
     """
     symbol: str
     timeframe: Timeframe
-    ema20: Optional[float]
-    ema50: Optional[float]
-    rsi: Optional[float]
-    macd: Optional[float]
-    signal: Optional[float]
-    histogram: Optional[float]
-    volume_avg: Optional[float]
+    ema9: Optional[float] = None
+    ema20: Optional[float] = None
+    ema50: Optional[float] = None
+    rsi: Optional[float] = None
+    macd: Optional[float] = None
+    signal: Optional[float] = None
+    histogram: Optional[float] = None
+    volume_avg: Optional[float] = None
+    
+    # VWAP Indicators
+    vwap: Optional[float] = None
+    vwap_slope: Optional[float] = None
+    vwap_slope_description: Optional[str] = None
+    vwap_upper_1: Optional[float] = None
+    vwap_lower_1: Optional[float] = None
+    vwap_upper_2: Optional[float] = None
+    vwap_lower_2: Optional[float] = None
 
 
 @dataclass
@@ -145,6 +165,94 @@ class IndicatorCalculator:
             'histogram': histogram
         }
 
+    def _calculate_vwap(self, data: pd.DataFrame) -> pd.Series:
+        """
+        Calcula VWAP (Volume Weighted Average Price) acumulativo.
+        
+        VWAP = Σ(Precio Típico × Volumen) / Σ(Volumen)
+        Precio Típico = (High + Low + Close) / 3
+        
+        Args:
+            data: DataFrame con columnas 'high', 'low', 'close', 'volume'
+        
+        Returns:
+            Serie con valores de VWAP acumulativos
+        """
+        # Calcular precio típico
+        typical_price = (data['high'] + data['low'] + data['close']) / 3
+        
+        # VWAP acumulativo
+        cumulative_tpv = (typical_price * data['volume']).cumsum()
+        cumulative_volume = data['volume'].cumsum()
+        
+        # Evitar división por cero
+        vwap = cumulative_tpv / cumulative_volume.replace(0, np.nan)
+        
+        return vwap
+    
+    def _calculate_vwap_slope(self, vwap_series: pd.Series, lookback: int = 10) -> tuple:
+        """
+        Calcula la pendiente de VWAP (derivada simple).
+        
+        Args:
+            vwap_series: Serie de valores VWAP
+            lookback: Número de períodos para calcular pendiente
+        
+        Returns:
+            tuple: (slope: float, description: str)
+                description puede ser: "ascendente", "descendente", "plana", "insuficiente"
+        """
+        if len(vwap_series) < lookback:
+            return 0.0, "insuficiente"
+        
+        # Tomar últimos N valores
+        recent_vwap = vwap_series.dropna().tail(lookback)
+        
+        if len(recent_vwap) < 2:
+            return 0.0, "insuficiente"
+        
+        # Calcular pendiente: (último - primero) / períodos
+        slope = (recent_vwap.iloc[-1] - recent_vwap.iloc[0]) / len(recent_vwap)
+        
+        # Umbral para EURUSD (ajustable según activo)
+        # 0.00005 = 0.5 pips
+        threshold = 0.00005
+        
+        if slope > threshold:
+            return slope, "ascendente"
+        elif slope < -threshold:
+            return slope, "descendente"
+        else:
+            return slope, "plana"
+    
+    def _calculate_vwap_bands(self, data: pd.DataFrame, vwap: pd.Series) -> Dict[str, pd.Series]:
+        """
+        Calcula bandas de VWAP (±1σ, ±2σ) usando desviación estándar ponderada por volumen.
+        
+        Args:
+            data: DataFrame con columnas 'high', 'low', 'close', 'volume'
+            vwap: Serie de VWAP ya calculada
+        
+        Returns:
+            Diccionario con 'upper_1', 'lower_1', 'upper_2', 'lower_2'
+        """
+        typical_price = (data['high'] + data['low'] + data['close']) / 3
+        
+        # Calcular varianza ponderada acumulativa
+        squared_diff = (typical_price - vwap) ** 2
+        cumulative_var = (squared_diff * data['volume']).cumsum() / data['volume'].cumsum()
+        
+        # Desviación estándar
+        std_dev = np.sqrt(cumulative_var)
+        
+        # Bandas
+        return {
+            'upper_1': vwap + std_dev,
+            'lower_1': vwap - std_dev,
+            'upper_2': vwap + 2 * std_dev,
+            'lower_2': vwap - 2 * std_dev
+        }
+    
     def _calculate_volume_average(self, volume: pd.Series, period: int = 20) -> pd.Series:
         """
         Calcula el promedio móvil de volumen.
@@ -177,14 +285,21 @@ class IndicatorCalculator:
                 f"Se requieren al menos 50 velas, se tienen {ohlcv_data.count}"
             )
 
-        # Calcular indicadores
+        # Calcular indicadores estándar
+        ema9 = self._calculate_ema(ohlcv_data.data['close'], 9)
         ema20 = self._calculate_ema(ohlcv_data.data['close'], 20)
         ema50 = self._calculate_ema(ohlcv_data.data['close'], 50)
         rsi = self._calculate_rsi(ohlcv_data.data['close'], 14)
         macd_data = self._calculate_macd(ohlcv_data.data['close'])
         volume_avg = self._calculate_volume_average(ohlcv_data.data['volume'], 20)
+        
+        # Calcular indicadores VWAP
+        vwap = self._calculate_vwap(ohlcv_data.data)
+        vwap_slope, vwap_slope_desc = self._calculate_vwap_slope(vwap, lookback=10)
+        vwap_bands = self._calculate_vwap_bands(ohlcv_data.data, vwap)
 
         # Obtener los últimos valores válidos
+        latest_ema9 = ema9.dropna().iloc[-1] if not ema9.dropna().empty else None
         latest_ema20 = ema20.dropna().iloc[-1] if not ema20.dropna().empty else None
         latest_ema50 = ema50.dropna().iloc[-1] if not ema50.dropna().empty else None
         latest_rsi = rsi.dropna().iloc[-1] if not rsi.dropna().empty else None
@@ -192,17 +307,32 @@ class IndicatorCalculator:
         latest_signal = macd_data['signal'].dropna().iloc[-1] if not macd_data['signal'].dropna().empty else None
         latest_histogram = macd_data['histogram'].dropna().iloc[-1] if not macd_data['histogram'].dropna().empty else None
         latest_volume_avg = volume_avg.dropna().iloc[-1] if not volume_avg.dropna().empty else None
+        
+        # VWAP últimos valores
+        latest_vwap = vwap.dropna().iloc[-1] if not vwap.dropna().empty else None
+        latest_vwap_upper_1 = vwap_bands['upper_1'].dropna().iloc[-1] if not vwap_bands['upper_1'].dropna().empty else None
+        latest_vwap_lower_1 = vwap_bands['lower_1'].dropna().iloc[-1] if not vwap_bands['lower_1'].dropna().empty else None
+        latest_vwap_upper_2 = vwap_bands['upper_2'].dropna().iloc[-1] if not vwap_bands['upper_2'].dropna().empty else None
+        latest_vwap_lower_2 = vwap_bands['lower_2'].dropna().iloc[-1] if not vwap_bands['lower_2'].dropna().empty else None
 
         return IndicatorData(
             symbol=ohlcv_data.symbol,
             timeframe=ohlcv_data.timeframe,
+            ema9=latest_ema9,
             ema20=latest_ema20,
             ema50=latest_ema50,
             rsi=latest_rsi,
             macd=latest_macd,
             signal=latest_signal,
             histogram=latest_histogram,
-            volume_avg=latest_volume_avg
+            volume_avg=latest_volume_avg,
+            vwap=latest_vwap,
+            vwap_slope=vwap_slope,
+            vwap_slope_description=vwap_slope_desc,
+            vwap_upper_1=latest_vwap_upper_1,
+            vwap_lower_1=latest_vwap_lower_1,
+            vwap_upper_2=latest_vwap_upper_2,
+            vwap_lower_2=latest_vwap_lower_2
         )
 
     def calculate_indicators_multi_timeframe(self,
@@ -257,13 +387,23 @@ class IndicatorCalculator:
         for timeframe, indicator_data in indicators.indicators.items():
             timeframes_data[timeframe.name] = {
                 "indicators": {
+                    "ema9": indicator_data.ema9,
                     "ema20": indicator_data.ema20,
                     "ema50": indicator_data.ema50,
                     "rsi": indicator_data.rsi,
                     "macd": indicator_data.macd,
                     "signal": indicator_data.signal,
                     "histogram": indicator_data.histogram,
-                    "volume_avg": indicator_data.volume_avg
+                    "volume_avg": indicator_data.volume_avg,
+                    "vwap": indicator_data.vwap,
+                    "vwap_slope": indicator_data.vwap_slope,
+                    "vwap_slope_description": indicator_data.vwap_slope_description,
+                    "vwap_bands": {
+                        "upper_1": indicator_data.vwap_upper_1,
+                        "lower_1": indicator_data.vwap_lower_1,
+                        "upper_2": indicator_data.vwap_upper_2,
+                        "lower_2": indicator_data.vwap_lower_2
+                    }
                 }
             }
 
