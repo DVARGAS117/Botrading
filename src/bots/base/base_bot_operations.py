@@ -24,6 +24,7 @@ from datetime import datetime, time
 from enum import Enum
 import logging
 from pathlib import Path
+import os
 
 from src.core.mt5_connection import MT5Connection
 from src.core.mt5_data_extractor import MT5DataExtractor, Timeframe
@@ -32,7 +33,8 @@ from src.core.opening_range_calculator import OpeningRangeCalculator
 from src.core.prompt_builder import PromptBuilder
 from src.core.vwap_response_parser import VWAPResponseParser
 from src.core.vwap_prompt_builder import MarketContext
-from src.core.gemini_api_client import GeminiAPIClient
+from src.core.vertex_ai_client import VertexAIClient, VertexAIConfig
+from src.core.gemini_client import GeminiClient, GeminiConfig  # Fallback opcional si se requiere en futuro
 from src.core.dual_order_manager import DualOrderManager
 from src.core.logger import get_bot_logger
 
@@ -80,7 +82,7 @@ class BotConfig:
     risk_per_trade: float = 0.5  # 0.5%
     max_daily_risk: float = 2.0  # 2R
     reevaluation_interval_minutes: int = 10
-    ai_model: str = "gemini-2.0-flash-exp"
+    ai_model: str = "gemini-2.5-pro"  # Enforced por VertexAIConfig
     enable_dual_orders: bool = True
     log_level: str = "INFO"
     
@@ -141,7 +143,8 @@ class BaseBotOperations(ABC):
         self.or_calculator: Optional[OpeningRangeCalculator] = None
         self.prompt_builder: Optional[PromptBuilder] = None
         self.response_parser: Optional[VWAPResponseParser] = None
-        self.ai_client: Optional[GeminiAPIClient] = None
+        # Cliente IA (Vertex por defecto)
+        self.ai_client: Optional[VertexAIClient] = None
         self.order_manager: Optional[DualOrderManager] = None
         
         # Estado del bot
@@ -192,8 +195,28 @@ class BaseBotOperations(ABC):
             # 6. Response Parser
             self.response_parser = VWAPResponseParser()
             
-            # 7. AI Client
-            self.ai_client = GeminiAPIClient(model_name=self.config.ai_model)
+            # 7. AI Client (Vertex por defecto)
+            try:
+                self.ai_client = VertexAIClient(
+                    api_key=os.getenv("GOOGLE_API_KEY"),
+                    config=VertexAIConfig(model=self.config.ai_model)
+                )
+            except Exception as e:
+                # Fallback a Gemini solo si explícitamente disponible y variable de entorno lo permite
+                allow_fallback = os.getenv("ALLOW_GEMINI_FALLBACK") == "1"
+                if allow_fallback:
+                    self.logger.warning(
+                        f"VertexAIClient fallo ({e}). Intentando fallback GeminiClient..."
+                    )
+                    try:
+                        self.ai_client = GeminiClient(
+                            api_key=os.getenv("GEMINI_API_KEY"),
+                            config=GeminiConfig(model=self.config.ai_model)
+                        )
+                    except Exception as eg:
+                        raise BotOperationError(f"Fallo inicializando ambos clientes IA: {eg}") from eg
+                else:
+                    raise BotOperationError(f"Fallo inicializando VertexAIClient: {e}") from e
             
             # 8. Order Manager (si dual orders habilitado)
             if self.config.enable_dual_orders:
@@ -481,14 +504,13 @@ class BaseBotOperations(ABC):
         """
         for attempt in range(1, max_retries + 1):
             try:
-                response = self.ai_client.generate_content(
-                    system_instruction=system_prompt,
-                    prompt=user_prompt
-                )
-                
-                if response:
+                # Unificar prompts para Vertex (no soporta system separado en nuestro wrapper)
+                combined_prompt = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
+                response_obj = self.ai_client.send_prompt(combined_prompt)
+
+                if response_obj and response_obj.success:
                     self.logger.info(f"✅ Respuesta IA obtenida (intento {attempt})")
-                    return response
+                    return response_obj.content or ""
                 
             except Exception as e:
                 self.logger.warning(

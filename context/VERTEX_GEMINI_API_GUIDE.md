@@ -15,6 +15,7 @@
 - **`ALLOW_CUSTOM_GEMINI_MODEL` (opcional):** si vale `1`, permite usar un modelo distinto a `gemini-2.5-pro`.
 - **`GEMINI_VERTEX_ENDPOINT` (opcional):** por defecto `https://aiplatform.googleapis.com/v1`.
 - **`GEMINI_API_KEY` (opcional):** solo si deseas usar Google AI Studio como fallback.
+- **`ALLOW_GEMINI_FALLBACK` (opcional):** si vale `1`, cuando falle la inicialización del cliente Vertex se intenta crear un cliente Gemini SDK (solo para continuidad; Vertex sigue siendo el camino oficial).
 
 **Flujo de Llamada (Vertex)**
 - **Bajo nivel:** `src/services/vertex_gemini_client.py` con `generate_vertex_response(...)`.
@@ -82,3 +83,18 @@ gcloud services api-keys lookup "<GOOGLE_API_KEY>"
 **Notas**
 - Este repo combina dos integraciones: Vertex (REST) y SDK `google-generativeai`. La prueba `test_vertex_simple.py` valida específicamente Vertex.
 - La presencia de `usageMetadata` con `promptTokenCount`/`candidatesTokenCount` y `finishReason` en la respuesta es característica del esquema Vertex.
+ - La clase base de bots (`BaseBotOperations`) ya usa `VertexAIClient` por defecto. Solo Bot1 (estrategia numérica) está activo; los demás bots aún no han sido migrados.
+ - Para activar fallback temporal al SDK Gemini si Vertex no inicializa, exporta `ALLOW_GEMINI_FALLBACK=1`.
+
+**Estado de Migración a Vertex**
+| Componente | Estado | Detalle |
+|------------|--------|---------|
+| Cliente bajo nivel REST | ✅ | `generate_vertex_response` estable |
+| Cliente alto nivel Vertex | ✅ | `VertexAIClient` con enforcement de modelo |
+| BaseBotOperations | ✅ | Usa Vertex por defecto, fallback opcional Gemini |
+| Bot1 (Strategy) | ✅ | Utiliza flujo Vertex vía clase base |
+| Bot2-Bot5 | ⏳ | Pendiente de implementación/migración |
+| Métricas de costos Vertex | ⏳ | Por definir (actualmente sin cálculo) |
+| Documentación fallback | ✅ | Variable `ALLOW_GEMINI_FALLBACK` añadida |
+
+Hasta que los demás bots estén implementados, cualquier referencia a operación multi-bot asume solo Bot1 activo.

@@ -200,10 +200,10 @@ class TestBot1Integration:
     
     @patch('src.bots.base.base_bot_operations.MT5Connection')
     @patch('src.bots.base.base_bot_operations.MT5DataExtractor')
-    @patch('src.bots.base.base_bot_operations.GeminiAPIClient')
+    @patch('src.bots.base.base_bot_operations.VertexAIClient')
     def test_full_initialization(
         self,
-        mock_gemini,
+        mock_vertex,
         mock_extractor,
         mock_mt5,
         bot

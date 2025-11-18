@@ -31,7 +31,7 @@ Botrading es un sistema de trading automatizado que:
 
 ---
 
-## 📁 Estructura del Proyecto
+## 📁 Estructura del Proyecto (Estado Actual Parcial)
 
 ```
 BOTRADING/
@@ -51,10 +51,15 @@ BOTRADING/
 │   │   ├── mt5_connector.py      # 🔜 Conexión MT5
 │   │   ├── ia_agent.py           # 🔜 Agente IA Gemini
 │   │   └── risk_manager.py       # 🔜 Gestión de riesgo
-│   ├── bots/                     # Instancias de bots
-│   │   ├── bot_1.py              # 🔜 Bot numérico
-│   │   ├── bot_2.py              # 🔜 Bot visual
-│   │   └── orchestrator.py       # 🔜 Orquestador
+│   ├── bots/                     # Bots de trading
+│   │   ├── base/                 # Lógica base compartida (Vertex integrado)
+│   │   │   └── base_bot_operations.py  # Clase base usa VertexAIClient
+│   │   ├── bot_1/                # Bot 1 numérico (estrategia activa)
+│   │   │   ├── strategy.py       # Estrategia basada en VWAP (usa flujo Vertex vía base)
+│   │   │   ├── config.py         # Config específica Bot1
+│   │   │   └── main.py           # Entrada específica (WIP)
+│   │   ├── bot_2/..bot_5/        # (Pendiente) Próximos bots aún no implementados
+│   │   └── orchestrator/         # (Pendiente) Orquestador multi-bot
 │   └── db/                       # Base de datos
 │       ├── models.py             # 🔜 Modelos SQLAlchemy
 │       └── queries.py            # 🔜 Consultas
@@ -119,7 +124,7 @@ BOTRADING/
 - Git
 - Cuenta MT5 (demo o real)
 - API Key de Vertex (Google Cloud) o alternativa Gemini API Studio
- API Key de Vertex (Google Cloud) obligatoria (`GOOGLE_API_KEY`). Fallback opcional Gemini API Studio (`GEMINI_API_KEY`). Modelo por defecto: `gemini-2.5-pro` (override con `ALLOW_CUSTOM_GEMINI_MODEL=1`).
+ API Key de Vertex (Google Cloud) obligatoria (`GOOGLE_API_KEY`). Fallback opcional Gemini API Studio (`GEMINI_API_KEY`) sólo si activas `ALLOW_GEMINI_FALLBACK=1`. Modelo por defecto: `gemini-2.5-pro` (override con `ALLOW_CUSTOM_GEMINI_MODEL=1`).
 
 ### Instalación
 
@@ -295,10 +300,25 @@ pytest tests/unit/test_config_loader.py -v
 - [ ] Multi-activo
 
 ### Fase 2: IA y Estrategias (Futuro)
-- [x] Integración Vertex (REST) + fallback Gemini API Studio
+- [x] Integración Vertex (REST) en clase base bots (en producción)
+- [ ] Fallback Gemini consolidado (variable `ALLOW_GEMINI_FALLBACK` documentada, pendiente pruebas multi-bot)
 - [ ] Dual Market/Limit
 - [ ] Reevaluación
 - [ ] Indicadores
+
+### Estado Migración Vertex
+| Componente | Estado | Detalle |
+|------------|--------|---------|
+| Cliente REST bajo nivel | ✅ | `generate_vertex_response` estable |
+| Cliente alto nivel Vertex | ✅ | `VertexAIClient` (modelo forzado) |
+| BaseBotOperations | ✅ | Migrado a Vertex, fallback opcional |
+| Bot1 (numérico) | ✅ | Ejecuta vía Vertex (estrategia lista) |
+| Bot2-Bot5 | ⏳ | No implementados aún |
+| Orquestador multi-bot | ⏳ | Pendiente de diseño |
+| Métricas de coste Vertex | ⏳ | Por definir (sin cálculo actual) |
+| Documentación de fallback | ✅ | README y guía Vertex actualizados |
+
+Nota: Actualmente sólo Bot1 está disponible; cualquier referencia a ejecución multi-bot es futura.
 
 ---
 
