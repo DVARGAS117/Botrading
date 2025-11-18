@@ -1,9 +1,9 @@
 # Core dependencies
 python-dotenv==1.0.0
-pydantic==2.5.0
-pydantic-settings==2.1.0
+pydantic>=2.8.0,<3.0  # Ajustado para soporte wheels Python 3.13
+pydantic-settings>=2.1.0,<3.0  # Compatible con nueva versión pydantic
 tzdata==2024.1  # Required for timezone support on Windows with Python 3.13+
-pandas==2.1.4  # Required for data analysis and MT5 data handling
+pandas>=2.2.0,<3.0  # Updated for Python 3.13 compatibility (wheels disponibles)
 requests>=2.31.0  # HTTP client for Vertex REST
 
 # AI Integration (T10)
@@ -12,7 +12,7 @@ Pillow>=10.0.0  # Image handling for visual bot analysis
 
 # Chart Generation (T24)
 matplotlib>=3.7.0  # Base plotting library
-mplfinance>=0.12.0  # Financial charts (candlesticks)
+mplfinance==0.12.10b0  # Ajustado para compatibilidad Python 3.13 (última build disponible)
 ta>=0.11.0  # Technical analysis indicators
 
 # Testing

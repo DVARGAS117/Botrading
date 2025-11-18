@@ -197,9 +197,16 @@ class BaseBotOperations(ABC):
             
             # 7. AI Client (Vertex por defecto)
             try:
+                model_to_use = self.config.ai_model
+                if model_to_use != "gemini-2.5-pro" and os.getenv("ALLOW_CUSTOM_GEMINI_MODEL") != "1":
+                    self.logger.warning(
+                        f"Modelo '{model_to_use}' reemplazado por 'gemini-2.5-pro' (enforcement)"
+                    )
+                    model_to_use = "gemini-2.5-pro"
+                    self.config.ai_model = model_to_use
                 self.ai_client = VertexAIClient(
                     api_key=os.getenv("GOOGLE_API_KEY"),
-                    config=VertexAIConfig(model=self.config.ai_model)
+                    config=VertexAIConfig(model=model_to_use)
                 )
             except Exception as e:
                 # Fallback a Gemini solo si explícitamente disponible y variable de entorno lo permite
@@ -220,7 +227,13 @@ class BaseBotOperations(ABC):
             
             # 8. Order Manager (si dual orders habilitado)
             if self.config.enable_dual_orders:
-                self.order_manager = DualOrderManager(self.mt5_connection)
+                try:
+                    self.order_manager = DualOrderManager(self.mt5_connection)
+                except Exception as oe:
+                    self.logger.warning(
+                        f"No se pudo inicializar DualOrderManager (continuando sin dual orders): {oe}",
+                        extra={'error': str(oe)}
+                    )
             
             self.is_initialized = True
             self.logger.info("✅ Todos los componentes inicializados correctamente")
@@ -230,8 +243,7 @@ class BaseBotOperations(ABC):
         except Exception as e:
             self.logger.error(
                 f"❌ Error en inicialización: {str(e)}",
-                extra={'error': str(e)},
-                exc_info=True
+                extra={'error': str(e)}
             )
             return False
     
