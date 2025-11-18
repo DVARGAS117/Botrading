@@ -24,6 +24,9 @@ Botrading es un sistema de trading automatizado que:
 - 🔄 **Orquesta múltiples bots** independientes con ciclos a inicio de hora
 - 💱 **Integra MetaTrader 5** para datos OHLCV, consulta de posiciones y gestión de órdenes
 - 🧠 **Utiliza IA Gemini** para tomar decisiones de entrada, reevaluación y gestión de riesgo
+  - ✅ **Soporte dual**: Vertex AI (Google Cloud) y Google AI Studio
+  - ✅ **Configurable**: Cambia entre APIs sin modificar código
+  - ✅ **Recomendado**: Vertex AI para producción, Google AI Studio para desarrollo
 - 📊 **Compara metodologías** mediante pares simultáneos Market/Limit
 - 💾 **Persiste datos** con SQLite para trazabilidad y análisis
 - ⚙️ **Configurable vía JSON** sin tocar código
