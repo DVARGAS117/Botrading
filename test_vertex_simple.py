@@ -22,7 +22,22 @@ def main() -> int:
     endpoint = os.getenv("GEMINI_VERTEX_ENDPOINT", "https://aiplatform.googleapis.com/v1")
 
     if not api_key:
-        print("❌ Falta GOOGLE_API_KEY en el entorno")
+        # Fallback a credentials.json
+        cred_path = os.path.join(os.path.dirname(__file__), 'config', 'credentials.json')
+        if not os.path.exists(cred_path):
+            # Intentar ruta alternativa config/ bajo repo
+            cred_path = os.path.join(os.path.dirname(__file__), 'config', 'credentials.json')
+        try:
+            with open(cred_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                api_key = data.get('gemini', {}).get('api_key')
+                if api_key:
+                    print("ℹ️  GOOGLE_API_KEY no estaba en entorno; usando credentials.json")
+        except Exception as e:
+            pass
+
+    if not api_key:
+        print("❌ Falta GOOGLE_API_KEY (ni entorno ni credentials.json)")
         return 1
 
     print("🚀 Probando Vertex AI (REST)...")
