@@ -28,6 +28,7 @@ import os
 
 from src.core.mt5_connection import MT5Connection
 from src.core.mt5_data_extractor import MT5DataExtractor, Timeframe
+from src.core.mock_market_data import MockMarketDataExtractor
 from src.core.indicator_calculator import IndicatorCalculator
 from src.core.opening_range_calculator import OpeningRangeCalculator
 from src.core.prompt_builder import PromptBuilder
@@ -175,13 +176,16 @@ class BaseBotOperations(ABC):
         try:
             self.logger.info("Iniciando inicialización de componentes...")
             
-            # 1. Conexión MT5
-            self.mt5_connection = MT5Connection()
-            if not self.mt5_connection.connect():
-                raise BotOperationError("No se pudo conectar a MT5")
-            
-            # 2. Data Extractor
-            self.data_extractor = MT5DataExtractor(self.mt5_connection)
+            # 1-2. Fuente de datos (mock o MT5 real)
+            if os.getenv("MOCK_MARKET_DATA") == "1":
+                self.logger.warning("Usando MockMarketDataExtractor (MOCK_MARKET_DATA=1)")
+                self.mt5_connection = None
+                self.data_extractor = MockMarketDataExtractor()
+            else:
+                self.mt5_connection = MT5Connection()
+                if not self.mt5_connection.connect():
+                    raise BotOperationError("No se pudo conectar a MT5")
+                self.data_extractor = MT5DataExtractor(self.mt5_connection)
             
             # 3. Indicator Calculator
             self.indicator_calculator = IndicatorCalculator()
@@ -254,6 +258,8 @@ class BaseBotOperations(ABC):
         Returns:
             bool: True si estamos en horario de trading
         """
+        if os.getenv("IGNORE_TRADING_HOURS") == "1":
+            return True
         now = datetime.now()
         current_time = now.time()
         
@@ -491,7 +497,7 @@ class BaseBotOperations(ABC):
                 count=100
             )
             
-            or_data = self.or_calculator.calculate_opening_range(ohlcv_data)
+            or_data = self.or_calculator.calculate_opening_range(ohlcv_data.data)
             
             return or_data
             

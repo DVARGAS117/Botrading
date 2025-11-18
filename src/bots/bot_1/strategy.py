@@ -156,7 +156,7 @@ class Bot1Strategy(BaseBotOperations):
                 )
                 return {
                     'accion': 'NO_OPERAR',
-                    'razonamiento': f'Errores de validación: {', '.join(validation_errors)}'
+                    'razonamiento': 'Errores de validación: ' + ", ".join(validation_errors)
                 }
 
             # Conversión a formato bot (mock friendly)

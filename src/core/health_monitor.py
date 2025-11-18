@@ -237,7 +237,7 @@ class HealthMonitor:
             True si es reciente
         """
         max_age = timedelta(hours=self.max_age_hours)
-        return datetime.now() - timestamp <= max_age
+        return timestamp >= datetime.now() - max_age
 
     def _discover_bot_names(self) -> List[str]:
         """
