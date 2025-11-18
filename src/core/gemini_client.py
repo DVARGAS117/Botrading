@@ -242,12 +242,21 @@ class GeminiClient:
         self.config = config if config is not None else GeminiConfig()
         
         if self.config.use_vertex_ai:
-            # Usar Vertex AI
+            # Usar Vertex AI (intento de importación dinámica si no estaba disponible al cargar el módulo)
             if not VERTEX_AVAILABLE:
-                raise GeminiClientError(
-                    "google-cloud-aiplatform no está instalado. "
-                    "Instala con: pip install google-cloud-aiplatform"
-                )
+                try:
+                    import importlib  # type: ignore
+                    vertexai_mod = importlib.import_module("vertexai")
+                    from vertexai.generative_models import GenerativeModel as _GenModel, GenerationConfig as _VertexGenConfig  # type: ignore
+                    globals()["vertexai"] = vertexai_mod
+                    globals()["GenerativeModel"] = _GenModel
+                    globals()["VertexGenerationConfig"] = _VertexGenConfig
+                    globals()["VERTEX_AVAILABLE"] = True
+                except Exception:
+                    raise GeminiClientError(
+                        "google-cloud-aiplatform no está instalado o falló la importación dinámica. "
+                        "Instala con: pip install google-cloud-aiplatform"
+                    )
             
             if not self.config.project_id:
                 raise GeminiClientError("project_id es requerido para Vertex AI")
