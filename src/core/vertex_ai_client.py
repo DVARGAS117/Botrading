@@ -12,7 +12,7 @@ from typing import List, Optional
 import os
 import time
 
-from src.services.vertex_gemini_client import generate_vertex_response
+import src.services.vertex_gemini_client as vertex_module
 from src.core.gemini_client import GeminiResponse
 
 
@@ -58,7 +58,7 @@ class VertexAIClient:
             return GeminiResponse(success=False, error_message="Prompt no puede estar vacío", error_type="validation_error")
 
         start = time.time()
-        result = generate_vertex_response(
+        result = vertex_module.generate_vertex_response(
             system_prompt=None,
             user_prompt=prompt,
             temperature=self.config.temperature,
