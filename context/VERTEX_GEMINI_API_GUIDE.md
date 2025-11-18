@@ -11,7 +11,8 @@
 
 **Variables de Entorno Relevantes (.env)**
 - **`GOOGLE_API_KEY`:** clave API con acceso a Vertex (formato puede variar; es válido el prefijo `AQ.`). Debe permitir llamadas a `aiplatform.googleapis.com`.
-- **`GEMINI_MODEL`:** nombre del modelo (p. ej. `gemini-2.5-flash`, `gemini-2.5-pro`).
+- **`GEMINI_MODEL`:** por defecto forzado a `gemini-2.5-pro`. Si estableces otro valor y quieres permitirlo, debes configurar también `ALLOW_CUSTOM_GEMINI_MODEL=1`.
+- **`ALLOW_CUSTOM_GEMINI_MODEL` (opcional):** si vale `1`, permite usar un modelo distinto a `gemini-2.5-pro`.
 - **`GEMINI_VERTEX_ENDPOINT` (opcional):** por defecto `https://aiplatform.googleapis.com/v1`.
 - **`GEMINI_API_KEY` (opcional):** solo si deseas usar Google AI Studio como fallback.
 
@@ -50,7 +51,7 @@ curl -X POST "https://aiplatform.googleapis.com/v1/publishers/google/models/gemi
 - **1. Habilitar API:** en Google Cloud Console, habilitar “Vertex AI API” para el proyecto de la clave.
 - **2. Clave válida:** usar `GOOGLE_API_KEY` que tenga permisos sobre `aiplatform.googleapis.com` (las claves pueden no empezar por `AIza...`; `AQ.` también es válido).
 - **3. Restricciones de clave (opcional):** si se restringe por API, incluir “Vertex AI API”. Si se restringe por IP/origen, considerar el host que llama.
-- **4. Modelo correcto:** usar nombres válidos (ej.: `gemini-2.5-flash`, `gemini-2.5-pro`).
+- **4. Modelo forzado:** el sistema exige `gemini-2.5-pro`. Para usar otro (bajo tu responsabilidad), exporta además `ALLOW_CUSTOM_GEMINI_MODEL=1`.
 - **5. Cliente alto nivel:** para bots y módulos del core, preferir `VertexAIClient` (homogéneo con `GeminiResponse`).
 - **6. Probar con `test_vertex_simple.py`:** debe devolver `HTTP 200` y texto `OK`.
 

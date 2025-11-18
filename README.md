@@ -24,6 +24,7 @@ Botrading es un sistema de trading automatizado que:
 - 🔄 **Orquesta múltiples bots** independientes con ciclos a inicio de hora
 - 💱 **Integra MetaTrader 5** para datos OHLCV, consulta de posiciones y gestión de órdenes
 - 🧠 **Utiliza IA Vertex (Gemini)** para tomar decisiones de entrada, reevaluación y gestión de riesgo
+- Modelo forzado por defecto: `gemini-2.5-pro` (override sólo si exportas `ALLOW_CUSTOM_GEMINI_MODEL=1`)
 - 📊 **Compara metodologías** mediante pares simultáneos Market/Limit
 - 💾 **Persiste datos** con SQLite para trazabilidad y análisis
 - ⚙️ **Configurable vía JSON** sin tocar código
@@ -118,6 +119,7 @@ BOTRADING/
 - Git
 - Cuenta MT5 (demo o real)
 - API Key de Vertex (Google Cloud) o alternativa Gemini API Studio
+ API Key de Vertex (Google Cloud) obligatoria (`GOOGLE_API_KEY`). Fallback opcional Gemini API Studio (`GEMINI_API_KEY`). Modelo por defecto: `gemini-2.5-pro` (override con `ALLOW_CUSTOM_GEMINI_MODEL=1`).
 
 ### Instalación
 

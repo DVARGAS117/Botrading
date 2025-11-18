@@ -18,12 +18,28 @@ from src.core.gemini_client import GeminiResponse
 
 @dataclass
 class VertexAIConfig:
-    model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
     temperature: float = 0.0
     max_tokens: int = 1024
     top_p: float = 1.0
     timeout: int = 30
     endpoint: str = os.getenv("GEMINI_VERTEX_ENDPOINT", "https://aiplatform.googleapis.com/v1")
+
+    def __post_init__(self):
+        """Enforce del modelo por defecto gemini-2.5-pro salvo override manual.
+
+        Override permitido si:
+        - Se pasa explícitamente un modelo distinto al instanciar VertexAIConfig (param model) Y
+        - La variable de entorno ALLOW_CUSTOM_GEMINI_MODEL == "1"
+
+        De lo contrario, se fuerza gemini-2.5-pro.
+        """
+        default_model = "gemini-2.5-pro"
+        allow_custom = os.getenv("ALLOW_CUSTOM_GEMINI_MODEL") == "1"
+        if self.model != default_model and not allow_custom:
+            raise ValueError(
+                f"Modelo '{self.model}' no permitido. Usa '{default_model}' o establece ALLOW_CUSTOM_GEMINI_MODEL=1 para override manual."
+            )
 
 
 class VertexAIClient:
