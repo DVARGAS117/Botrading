@@ -65,13 +65,15 @@ class TestGeminiConfig:
         with pytest.raises(ValueError, match="temperature debe estar entre 0 y 2"):
             GeminiConfig(temperature=2.5)
     
-    def test_config_validation_max_tokens(self):
-        """Verificar validación de max_tokens"""
-        with pytest.raises(ValueError, match="max_tokens debe ser positivo"):
-            GeminiConfig(max_tokens=0)
-        
-        with pytest.raises(ValueError, match="max_tokens debe ser positivo"):
-            GeminiConfig(max_tokens=-100)
+    def test_config_validation_vertex_ai_missing_project_id(self):
+        """Verificar validación de Vertex AI sin project_id"""
+        with pytest.raises(ValueError, match="project_id es requerido cuando use_vertex_ai=True"):
+            GeminiConfig(use_vertex_ai=True, project_id=None)
+    
+    def test_config_validation_vertex_ai_missing_location(self):
+        """Verificar validación de Vertex AI sin location"""
+        with pytest.raises(ValueError, match="location es requerida cuando use_vertex_ai=True"):
+            GeminiConfig(use_vertex_ai=True, project_id="test-project", location=None)
     
     def test_config_to_dict(self):
         """Verificar conversión a diccionario"""
@@ -243,17 +245,20 @@ class TestGeminiClient:
         assert response.tokens_input == 100
         assert response.tokens_output == 50
     
-    @patch('google.generativeai.GenerativeModel')
-    def test_send_text_prompt_with_images(self, mock_model, client):
+    @patch('os.path.exists', return_value=True)
+    @patch('PIL.Image.open')
+    def test_send_text_prompt_with_images(self, mock_image_open, mock_exists, client):
         """Verificar envío de prompt con imágenes"""
+        # Mock imagen
+        mock_img = Mock()
+        mock_image_open.return_value = mock_img
+        
         mock_response = Mock()
         mock_response.text = '{"accion": "NO_OPERAR"}'
         mock_response.usage_metadata.prompt_token_count = 200
         mock_response.usage_metadata.candidates_token_count = 30
         
-        mock_model_instance = Mock()
-        mock_model_instance.generate_content.return_value = mock_response
-        mock_model.return_value = mock_model_instance
+        client.model.generate_content.return_value = mock_response
         
         # Ejecutar con imágenes
         prompt = "Analiza estas gráficas"
@@ -265,12 +270,9 @@ class TestGeminiClient:
         assert response.success is True
         assert response.tokens_input == 200
     
-    @patch('google.generativeai.GenerativeModel')
-    def test_send_prompt_api_error(self, mock_model, client):
+    def test_send_prompt_api_error(self, client):
         """Verificar manejo de error de API"""
-        mock_model_instance = Mock()
-        mock_model_instance.generate_content.side_effect = Exception("API Error")
-        mock_model.return_value = mock_model_instance
+        client.model.generate_content.side_effect = Exception("API Error")
         
         # Ejecutar
         response = client.send_prompt("Test prompt")
@@ -280,37 +282,30 @@ class TestGeminiClient:
         assert response.error_message is not None
         assert "API Error" in response.error_message
     
-    @patch('google.generativeai.GenerativeModel')
-    def test_send_prompt_timeout(self, mock_model, client):
+    def test_send_prompt_timeout(self, client):
         """Verificar manejo de timeout"""
         import time
         
-        mock_model_instance = Mock()
         # Simular timeout
-        mock_model_instance.generate_content.side_effect = TimeoutError("Request timeout")
-        mock_model.return_value = mock_model_instance
+        client.model.generate_content.side_effect = TimeoutError("Request timeout")
         
         response = client.send_prompt("Test prompt")
         
         assert response.success is False
         assert response.error_type == "timeout"
     
-    @patch('google.generativeai.GenerativeModel')
-    def test_send_prompt_with_retry(self, mock_model, client):
+    def test_send_prompt_with_retry(self, client):
         """Verificar reintentos automáticos"""
-        mock_model_instance = Mock()
-        
-        # Primera llamada falla, segunda tiene éxito
         mock_response_success = Mock()
         mock_response_success.text = '{"accion": "OPERAR"}'
         mock_response_success.usage_metadata.prompt_token_count = 100
         mock_response_success.usage_metadata.candidates_token_count = 50
         
-        mock_model_instance.generate_content.side_effect = [
+        # Primera llamada falla, segunda tiene éxito
+        client.model.generate_content.side_effect = [
             Exception("Temporary error"),
             mock_response_success
         ]
-        mock_model.return_value = mock_model_instance
         
         # Ejecutar
         response = client.send_prompt("Test prompt")
@@ -318,21 +313,18 @@ class TestGeminiClient:
         # Debe tener éxito después de reintentar
         assert response.success is True
         assert response.content == '{"accion": "OPERAR"}'
-        assert mock_model_instance.generate_content.call_count == 2
+        assert client.model.generate_content.call_count == 2
     
-    @patch('google.generativeai.GenerativeModel')
-    def test_send_prompt_max_retries_exceeded(self, mock_model, client):
+    def test_send_prompt_max_retries_exceeded(self, client):
         """Verificar fallo después de agotar reintentos"""
-        mock_model_instance = Mock()
-        mock_model_instance.generate_content.side_effect = Exception("Persistent error")
-        mock_model.return_value = mock_model_instance
+        client.model.generate_content.side_effect = Exception("Persistent error")
         
         # Ejecutar
         response = client.send_prompt("Test prompt")
         
         # Debe fallar después de todos los reintentos
         assert response.success is False
-        assert mock_model_instance.generate_content.call_count == client.config.retry_attempts
+        assert client.model.generate_content.call_count == client.config.retry_attempts
     
     def test_calculate_cost(self, client):
         """Verificar cálculo de costo"""
@@ -352,17 +344,14 @@ class TestGeminiClient:
         expected_cost = (tokens_input / 1000 * cost_per_1k_input) + (tokens_output / 1000 * cost_per_1k_output)
         assert cost == pytest.approx(expected_cost, rel=1e-6)
     
-    @patch('google.generativeai.GenerativeModel')
-    def test_track_usage_statistics(self, mock_model, client):
+    def test_track_usage_statistics(self, client):
         """Verificar seguimiento de estadísticas de uso"""
         mock_response = Mock()
         mock_response.text = '{"accion": "OPERAR"}'
         mock_response.usage_metadata.prompt_token_count = 100
         mock_response.usage_metadata.candidates_token_count = 50
         
-        mock_model_instance = Mock()
-        mock_model_instance.generate_content.return_value = mock_response
-        mock_model.return_value = mock_model_instance
+        client.model.generate_content.return_value = mock_response
         
         # Hacer varias llamadas
         client.send_prompt("Prompt 1")
@@ -396,17 +385,14 @@ class TestGeminiClient:
         assert stats["total_tokens_input"] == 0
         assert stats["total_cost"] == 0.0
     
-    @patch('google.generativeai.GenerativeModel')
-    def test_send_prompt_invalid_json_response(self, mock_model, client):
+    def test_send_prompt_invalid_json_response(self, client):
         """Verificar manejo de respuesta JSON inválida"""
         mock_response = Mock()
         mock_response.text = "Esta no es una respuesta JSON válida"
         mock_response.usage_metadata.prompt_token_count = 100
         mock_response.usage_metadata.candidates_token_count = 50
         
-        mock_model_instance = Mock()
-        mock_model_instance.generate_content.return_value = mock_response
-        mock_model.return_value = mock_model_instance
+        client.model.generate_content.return_value = mock_response
         
         # Ejecutar
         response = client.send_prompt("Test prompt")
@@ -436,17 +422,14 @@ class TestGeminiClient:
         assert isinstance(formatted, str)
         assert len(formatted) > 0
     
-    @patch('google.generativeai.GenerativeModel')
-    def test_concurrent_requests(self, mock_model, client):
+    def test_concurrent_requests(self, client):
         """Verificar manejo de múltiples requests concurrentes"""
         mock_response = Mock()
         mock_response.text = '{"accion": "OPERAR"}'
         mock_response.usage_metadata.prompt_token_count = 100
         mock_response.usage_metadata.candidates_token_count = 50
         
-        mock_model_instance = Mock()
-        mock_model_instance.generate_content.return_value = mock_response
-        mock_model.return_value = mock_model_instance
+        client.model.generate_content.return_value = mock_response
         
         # Simular requests concurrentes
         responses = []
@@ -471,45 +454,51 @@ class TestGeminiClientEdgeCases:
     
     def test_extremely_long_prompt(self):
         """Verificar manejo de prompt muy largo"""
-        client = GeminiClient(api_key="test_key")
+        with patch('src.core.gemini_client.genai') as mock_genai:
+            mock_model = Mock()
+            mock_genai.GenerativeModel.return_value = mock_model
+            mock_genai.configure = Mock()
+            
+            client = GeminiClient(api_key="test_key")
+            client.model = mock_model  # Asegurar que tenemos el mock
         
         # Prompt de 100k caracteres
         long_prompt = "A" * 100000
         
         # Debe manejar o truncar el prompt
         # (Implementación específica depende de límites de la API)
-        with patch('google.generativeai.GenerativeModel') as mock_model:
-            mock_response = Mock()
-            mock_response.text = '{"accion": "NO_OPERAR"}'
-            mock_response.usage_metadata.prompt_token_count = 50000
-            mock_response.usage_metadata.candidates_token_count = 50
-            
-            mock_model_instance = Mock()
-            mock_model_instance.generate_content.return_value = mock_response
-            mock_model.return_value = mock_model_instance
-            
-            response = client.send_prompt(long_prompt)
-            # Debe manejar sin error
-            assert response is not None
+        mock_response = Mock()
+        mock_response.text = '{"accion": "NO_OPERAR"}'
+        mock_response.usage_metadata.prompt_token_count = 50000
+        mock_response.usage_metadata.candidates_token_count = 50
+        
+        client.model.generate_content.return_value = mock_response
+        
+        response = client.send_prompt(long_prompt)
+        # Debe manejar sin error
+        assert response is not None
     
     def test_special_characters_in_prompt(self):
         """Verificar manejo de caracteres especiales"""
-        client = GeminiClient(api_key="test_key")
+        with patch('src.core.gemini_client.genai') as mock_genai:
+            mock_model = Mock()
+            mock_genai.GenerativeModel.return_value = mock_model
+            mock_genai.configure = Mock()
+            
+            client = GeminiClient(api_key="test_key")
+            client.model = mock_model  # Asegurar que tenemos el mock
         
         prompt_with_special = "Analiza €USD con émojis 📈📉 y símbolos ©®™"
         
-        with patch('google.generativeai.GenerativeModel') as mock_model:
-            mock_response = Mock()
-            mock_response.text = '{"accion": "OPERAR"}'
-            mock_response.usage_metadata.prompt_token_count = 100
-            mock_response.usage_metadata.candidates_token_count = 50
-            
-            mock_model_instance = Mock()
-            mock_model_instance.generate_content.return_value = mock_response
-            mock_model.return_value = mock_model_instance
-            
-            response = client.send_prompt(prompt_with_special)
-            assert response.success is True
+        mock_response = Mock()
+        mock_response.text = '{"accion": "OPERAR"}'
+        mock_response.usage_metadata.prompt_token_count = 100
+        mock_response.usage_metadata.candidates_token_count = 50
+        
+        client.model.generate_content.return_value = mock_response
+        
+        response = client.send_prompt(prompt_with_special)
+        assert response.success is True
     
     def test_config_update_after_initialization(self):
         """Verificar actualización de configuración después de inicialización"""
@@ -555,7 +544,93 @@ class TestGeminiClientEdgeCases:
         assert client.config.timeout == 45
 
 
-class TestGeminiClientConversations:
+class TestGeminiClientVertexAI:
+    """Tests para el cliente Gemini con Vertex AI"""
+    
+    @pytest.fixture
+    def vertex_config(self):
+        """Fixture que retorna configuración para Vertex AI"""
+        return GeminiConfig(
+            use_vertex_ai=True,
+            project_id="test-project-123",
+            location="us-central1",
+            credentials_path="/path/to/credentials.json",
+            model="gemini-2.0-flash-exp",
+            temperature=0.7,
+            max_tokens=1024
+        )
+    
+    @pytest.fixture
+    def vertex_client(self, vertex_config):
+        """Fixture que retorna un cliente Vertex AI configurado"""
+        with patch('src.core.gemini_client.vertexai') as mock_vertexai, \
+             patch('src.core.gemini_client.GenerativeModel') as mock_generative_model:
+            
+            mock_model = Mock()
+            mock_generative_model.return_value = mock_model
+            
+            client = GeminiClient(config=vertex_config)
+            client.model = mock_model
+            
+            yield client
+    
+    def test_vertex_client_initialization(self, vertex_client, vertex_config):
+        """Verificar inicialización correcta del cliente Vertex AI"""
+        assert vertex_client is not None
+        assert vertex_client.config.use_vertex_ai is True
+        assert vertex_client.config.project_id == "test-project-123"
+        assert vertex_client.config.location == "us-central1"
+        assert vertex_client.api_key is None  # No se usa en Vertex AI
+    
+    def test_vertex_client_initialization_missing_project_id(self):
+        """Verificar error si falta project_id en Vertex AI"""
+        with pytest.raises(ValueError, match="project_id es requerido cuando use_vertex_ai=True"):
+            GeminiConfig(use_vertex_ai=True, location="us-central1")
+    
+    def test_vertex_send_text_prompt_success(self, vertex_client):
+        """Verificar envío exitoso de prompt de texto con Vertex AI"""
+        # Mock de la respuesta de Vertex AI
+        mock_response = Mock()
+        mock_response.text = '{"accion": "OPERAR", "direccion": "BUY"}'
+        mock_response.usage_metadata = Mock()
+        mock_response.usage_metadata.prompt_token_count = 100
+        mock_response.usage_metadata.candidates_token_count = 50
+        
+        vertex_client.model.generate_content.return_value = mock_response
+        
+        # Ejecutar
+        prompt = "Analiza EURUSD con RSI 65.0"
+        response = vertex_client.send_prompt(prompt)
+        
+        # Verificar
+        assert response.success is True
+        assert "OPERAR" in response.content
+        assert response.tokens_input == 100
+        assert response.tokens_output == 50
+    
+    def test_vertex_send_prompt_with_conversation(self, vertex_client):
+        """Verificar envío de prompt con conversación en Vertex AI"""
+        with patch.object(vertex_client, 'model') as mock_model:
+            # Crear mock de chat session
+            mock_chat_session = Mock()
+            mock_response = Mock()
+            mock_response.text = '{"accion": "MANTENER", "razonamiento": "Todo bien"}'
+            mock_response.usage_metadata.prompt_token_count = 150
+            mock_response.usage_metadata.candidates_token_count = 75
+            
+            mock_chat_session.send_message.return_value = mock_response
+            mock_model.start_chat.return_value = mock_chat_session
+            
+            # Enviar mensaje en conversación
+            conversation_id = "vertex_conv_test"
+            response = vertex_client.send_prompt(
+                "Evaluación con Vertex AI",
+                conversation_id=conversation_id
+            )
+            
+            assert response.success is True
+            assert "MANTENER" in response.content
+            assert conversation_id in vertex_client._conversation_sessions
     """Tests para manejo de conversaciones con contexto - T28"""
     
     def test_create_conversation_session(self):

@@ -40,6 +40,17 @@ except ImportError:
     genai = None  # type: ignore
     logging.warning("google-generativeai no está instalado. Instala con: pip install google-generativeai")
 
+try:
+    import vertexai
+    from vertexai.generative_models import GenerativeModel, GenerationConfig as VertexGenerationConfig
+    VERTEX_AVAILABLE = True
+except ImportError:
+    VERTEX_AVAILABLE = False
+    vertexai = None  # type: ignore
+    GenerativeModel = None  # type: ignore
+    VertexGenerationConfig = None  # type: ignore
+    logging.warning("google-cloud-aiplatform no está instalado. Instala con: pip install google-cloud-aiplatform")
+
 
 class GeminiClientError(Exception):
     """Excepción personalizada para errores del cliente Gemini"""
@@ -60,6 +71,10 @@ class GeminiConfig:
         timeout: Timeout en segundos (default 30)
         retry_attempts: Número de reintentos (default 3)
         backoff_factor: Factor de backoff exponencial (default 2)
+        use_vertex_ai: Si usar Vertex AI en lugar de Google AI Studio (default False)
+        project_id: ID del proyecto GCP para Vertex AI
+        location: Región de Vertex AI (default us-central1)
+        credentials_path: Ruta al archivo de credenciales JSON para Vertex AI
     """
     model: str = "gemini-2.0-flash-exp"
     temperature: float = 0.7
@@ -69,6 +84,10 @@ class GeminiConfig:
     timeout: int = 30
     retry_attempts: int = 3
     backoff_factor: float = 2.0
+    use_vertex_ai: bool = False
+    project_id: Optional[str] = None
+    location: str = "us-central1"
+    credentials_path: Optional[str] = None
     
     def __post_init__(self):
         """Valida los parámetros después de la inicialización"""
@@ -83,6 +102,13 @@ class GeminiConfig:
         
         if self.retry_attempts < 0:
             raise ValueError("retry_attempts no puede ser negativo")
+        
+        # Validaciones para Vertex AI
+        if self.use_vertex_ai:
+            if not self.project_id:
+                raise ValueError("project_id es requerido cuando use_vertex_ai=True")
+            if not self.location:
+                raise ValueError("location es requerida cuando use_vertex_ai=True")
     
     def to_dict(self) -> Dict[str, Any]:
         """Convierte la configuración a diccionario"""
@@ -110,7 +136,8 @@ class GeminiConfig:
         # Filtrar solo los campos válidos para GeminiConfig
         valid_fields = {
             'model', 'temperature', 'max_tokens', 'top_p', 'top_k',
-            'timeout', 'retry_attempts', 'backoff_factor'
+            'timeout', 'retry_attempts', 'backoff_factor',
+            'use_vertex_ai', 'project_id', 'location', 'credentials_path'
         }
         
         config_data = {k: v for k, v in data.items() if k in valid_fields}
@@ -211,30 +238,54 @@ class GeminiClient:
         Raises:
             GeminiClientError: Si no hay API key o la librería no está disponible
         """
-        if not GEMINI_AVAILABLE:
-            raise GeminiClientError(
-                "google-generativeai no está instalado. "
-                "Instala con: pip install google-generativeai"
-            )
-        
-        # Obtener API key
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        if not self.api_key:
-            raise GeminiClientError(
-                "API key es requerida. Proporciona api_key o establece GEMINI_API_KEY"
-            )
-        
         # Configuración
         self.config = config if config is not None else GeminiConfig()
         
+        if self.config.use_vertex_ai:
+            # Usar Vertex AI
+            if not VERTEX_AVAILABLE:
+                raise GeminiClientError(
+                    "google-cloud-aiplatform no está instalado. "
+                    "Instala con: pip install google-cloud-aiplatform"
+                )
+            
+            if not self.config.project_id:
+                raise GeminiClientError("project_id es requerido para Vertex AI")
+            
+            # Configurar credenciales si se proporciona
+            if self.config.credentials_path:
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = self.config.credentials_path
+            
+            # Inicializar Vertex AI
+            vertexai.init(project=self.config.project_id, location=self.config.location)
+            
+            # Inicializar modelo Vertex AI
+            self.model = GenerativeModel(self.config.model)
+            self.api_key = None  # No se usa en Vertex AI
+            
+        else:
+            # Usar Google AI Studio
+            if not GEMINI_AVAILABLE:
+                raise GeminiClientError(
+                    "google-generativeai no está instalado. "
+                    "Instala con: pip install google-generativeai"
+                )
+            
+            # Obtener API key
+            self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+            if not self.api_key:
+                raise GeminiClientError(
+                    "API key es requerida. Proporciona api_key o establece GEMINI_API_KEY"
+                )
+            
+            # Configurar API
+            genai.configure(api_key=self.api_key)
+            
+            # Inicializar modelo
+            self.model = genai.GenerativeModel(self.config.model)
+        
         # Logger
         self.logger = logging.getLogger(__name__)
-        
-        # Configurar API
-        genai.configure(api_key=self.api_key)
-        
-        # Inicializar modelo
-        self._initialize_model()
         
         # Costos
         self._cost_per_1k_input_tokens = self.DEFAULT_COST_PER_1K_INPUT
@@ -254,6 +305,8 @@ class GeminiClient:
         # Diccionario de sesiones de conversación activas
         # conversation_id -> ChatSession
         self._conversation_sessions: Dict[str, Any] = {}
+        
+        self.logger.info(f"Cliente Gemini inicializado: {'Vertex AI' if self.config.use_vertex_ai else 'Google AI Studio'} - {self.config.model}")
     
     def _initialize_model(self) -> None:
         """Inicializa el modelo de Gemini con la configuración"""
@@ -265,14 +318,24 @@ class GeminiClient:
     
     def _get_generation_config(self) -> Any:
         """Crea la configuración de generación para la API"""
-        if not GEMINI_AVAILABLE or GenerationConfig is None:
-            raise GeminiClientError("google-generativeai no está disponible")
-        return GenerationConfig(
-            temperature=self.config.temperature,
-            max_output_tokens=self.config.max_tokens,
-            top_p=self.config.top_p,
-            top_k=self.config.top_k
-        )
+        if self.config.use_vertex_ai:
+            if not VERTEX_AVAILABLE or VertexGenerationConfig is None:
+                raise GeminiClientError("google-cloud-aiplatform no está disponible")
+            return VertexGenerationConfig(
+                temperature=self.config.temperature,
+                max_output_tokens=self.config.max_tokens,
+                top_p=self.config.top_p,
+                top_k=self.config.top_k
+            )
+        else:
+            if not GEMINI_AVAILABLE or GenerationConfig is None:
+                raise GeminiClientError("google-generativeai no está disponible")
+            return GenerationConfig(
+                temperature=self.config.temperature,
+                max_output_tokens=self.config.max_tokens,
+                top_p=self.config.top_p,
+                top_k=self.config.top_k
+            )
     
     def _calculate_cost(self, tokens_input: int, tokens_output: int) -> float:
         """

@@ -1,0 +1,15 @@
+{
+    "provider": "gemini",
+    "model": "gemini-2.0-flash-exp",
+    "temperature": 0.7,
+    "max_tokens": 2048,
+    "timeout": 30,
+    "retry_attempts": 3,
+    "backoff_factor": 2,
+    "_comment_vertex_ai": "Configuración para Vertex AI (PRINCIPAL - RECOMENDADO)",
+    "use_vertex_ai": false,
+    "project_id": "YOUR_GCP_PROJECT_ID",
+    "location": "us-central1",
+    "credentials_path": null,
+    "_comment_google_ai_studio": "Para usar Google AI Studio (configuración actual), usa use_vertex_ai=false y proporciona api_key válida en credentials.json. Obtén tu API key en: https://aistudio.google.com/app/apikey"
+}
