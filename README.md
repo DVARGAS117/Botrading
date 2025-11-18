@@ -1,6 +1,6 @@
 # 🤖 Botrading - Sistema de Trading Automatizado con IA
 
-> Sistema de trading automatizado con múltiples bots orquestadores, integración MT5 y decisiones impulsadas por IA Gemini
+> Sistema de trading automatizado con múltiples bots orquestadores, integración MT5 y decisiones impulsadas por IA vía Vertex AI (Gemini)
 
 [![Tests](https://img.shields.io/badge/tests-711%20passing-brightgreen)]()
 [![Coverage](https://img.shields.io/badge/coverage-87%25-brightgreen)]()
@@ -23,7 +23,7 @@ Botrading es un sistema de trading automatizado que:
 
 - 🔄 **Orquesta múltiples bots** independientes con ciclos a inicio de hora
 - 💱 **Integra MetaTrader 5** para datos OHLCV, consulta de posiciones y gestión de órdenes
-- 🧠 **Utiliza IA Gemini** para tomar decisiones de entrada, reevaluación y gestión de riesgo
+- 🧠 **Utiliza IA Vertex (Gemini)** para tomar decisiones de entrada, reevaluación y gestión de riesgo
 - 📊 **Compara metodologías** mediante pares simultáneos Market/Limit
 - 💾 **Persiste datos** con SQLite para trazabilidad y análisis
 - ⚙️ **Configurable vía JSON** sin tocar código
@@ -117,7 +117,7 @@ BOTRADING/
 - Python 3.13 o superior
 - Git
 - Cuenta MT5 (demo o real)
-- API Key de Gemini
+- API Key de Vertex (Google Cloud) o alternativa Gemini API Studio
 
 ### Instalación
 
@@ -243,7 +243,7 @@ pytest tests/unit/test_config_loader.py -v
 - **pydantic** - Validación de datos
 - **python-dotenv** - Variables de entorno
 - **MetaTrader 5** - Plataforma de trading (próximamente)
-- **Google Gemini AI** - IA para decisiones (próximamente)
+- **Google Vertex AI (Gemini)** - IA para decisiones (oficial)
 - **SQLite** - Base de datos (próximamente)
 
 ---
@@ -293,7 +293,7 @@ pytest tests/unit/test_config_loader.py -v
 - [ ] Multi-activo
 
 ### Fase 2: IA y Estrategias (Futuro)
-- [ ] Integración Gemini
+- [x] Integración Vertex (REST) + fallback Gemini API Studio
 - [ ] Dual Market/Limit
 - [ ] Reevaluación
 - [ ] Indicadores

@@ -23,6 +23,9 @@ from src.core.gemini_client import (
     GeminiConfig,
     GeminiResponse
 )
+from src.core.vertex_ai_client import (
+    VertexAIClient, VertexAIConfig
+)
 from src.core.ai_response_parser import (
     AIResponseParser,
     AIDecisionType
@@ -64,21 +67,21 @@ def example_numeric_evaluation():
     print("-" * 60)
     print(prompt[:300] + "..." if len(prompt) > 300 else prompt)
     
-    # 3. Configurar y enviar a IA (simulado para el ejemplo)
-    # En producción, usar API key real
-    api_key = os.getenv("GEMINI_API_KEY", "demo_key")
-    
-    if api_key != "demo_key":
-        config = GeminiConfig(
-            model="gemini-2.0-flash-exp",
-            temperature=0.7,
-            max_tokens=1024,
-            timeout=30,
-            retry_attempts=3
-        )
-        
-        client = GeminiClient(api_key=api_key, config=config)
-        response = client.send_prompt(prompt)
+    # 3. Configurar y enviar a IA (Vertex por defecto)
+    vertex_key = os.getenv("GOOGLE_API_KEY")
+    if vertex_key:
+        vcfg = VertexAIConfig(model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
+        vclient = VertexAIClient(api_key=vertex_key, config=vcfg)
+        response = vclient.send_prompt(prompt)
+    else:
+        # Fallback a Gemini API Studio si no hay GOOGLE_API_KEY
+        api_key = os.getenv("GEMINI_API_KEY", "demo_key")
+        if api_key == "demo_key":
+            print("\n⚠️  No hay GOOGLE_API_KEY ni GEMINI_API_KEY. Usando modo demo.")
+            return
+        gcfg = GeminiConfig(model="gemini-2.0-flash-exp", temperature=0.7, max_tokens=1024, timeout=30, retry_attempts=3)
+        gclient = GeminiClient(api_key=api_key, config=gcfg)
+        response = gclient.send_prompt(prompt)
         
         print("\n✅ Respuesta de Gemini:")
         print("-" * 60)
@@ -104,8 +107,8 @@ def example_numeric_evaluation():
         else:
             print(f"❌ Error: {response.error_message}")
     else:
-        print("\n⚠️  GEMINI_API_KEY no configurada. Usando modo demo.")
-        print("   Para ejecutar con IA real, configura: export GEMINI_API_KEY='tu_clave'")
+        # No-op si no había llaves
+        pass
 
 
 def example_visual_evaluation():
@@ -292,16 +295,11 @@ def example_usage_statistics():
     print("EJEMPLO 6: Estadísticas de Uso")
     print("=" * 60)
     
-    api_key = os.getenv("GEMINI_API_KEY", "demo_key")
-    
-    if api_key != "demo_key":
+    # Mostrar estadísticas del cliente si se usa Gemini (en Vertex las exponemos por request)
+    api_key = os.getenv("GEMINI_API_KEY")
+    if api_key:
         config = GeminiConfig(model="gemini-2.0-flash-exp")
         client = GeminiClient(api_key=api_key, config=config)
-        
-        # Simular varias llamadas
-        # (en producción, estas serían llamadas reales)
-        
-        # Obtener estadísticas
         stats = client.get_usage_statistics()
         
         print("\n📊 Estadísticas de uso:")
@@ -315,7 +313,7 @@ def example_usage_statistics():
             print(f"  Latencia promedio: {stats['average_latency']:.2f}s")
             print(f"  Costo promedio: ${stats['average_cost_per_request']:.4f}")
     else:
-        print("\n⚠️  GEMINI_API_KEY no configurada. Stats no disponibles.")
+        print("\nℹ️  Estadísticas detalladas dependen del cliente en uso.")
 
 
 def example_custom_template():
@@ -385,7 +383,8 @@ def main():
     print("✅ Todos los ejemplos completados")
     print("=" * 60)
     print("\n💡 Para usar en producción:")
-    print("   1. Configura GEMINI_API_KEY: export GEMINI_API_KEY='tu_clave'")
+    print("   1. Preferido: configura GOOGLE_API_KEY para Vertex AI")
+    print("      Alternativa: GEMINI_API_KEY (Google AI Studio)")
     print("   2. Personaliza templates en config/prompt_templates.example.json")
     print("   3. Revisa la documentación en context/DOCUMENTACION/T10_ia_prompt_builder.md")
     print()
