@@ -10,7 +10,7 @@ Ticket: T11 - Registro de tokens y costo por consulta
 """
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 
 
@@ -96,6 +96,18 @@ class IACostTracker:
 
         # Cargar datos existentes
         existing_data = self._load_existing_data()
+
+        # Asegurar orden temporal estricto para sorting posterior (monotonicidad)
+        if existing_data:
+            try:
+                last_ts = datetime.fromisoformat(existing_data[-1].get("timestamp", record["timestamp"]))
+                new_ts = datetime.fromisoformat(record["timestamp"])
+                if new_ts <= last_ts:
+                    # Incrementar 1 microsegundo para evitar empate y garantizar orden
+                    record["timestamp"] = (last_ts + timedelta(microseconds=1)).isoformat()
+            except Exception:
+                # Si falla parseo, continuar sin ajustar
+                pass
 
         # Agregar nuevo registro
         existing_data.append(record)
