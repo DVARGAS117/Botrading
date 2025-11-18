@@ -1,0 +1,35 @@
+{
+    "trading_schedule": {
+        "timezone": "America/Lima",
+        "trading_hours": {
+            "start_time": "06:00",
+            "end_time": "13:00",
+            "ia_response_buffer_minutes": 3,
+            "description": "Horario de trading: 06:00-13:00 Lima. Buffer de 3min antes del cierre para respuesta IA"
+        },
+        "business_days": {
+            "enabled": [
+                1,
+                2,
+                3,
+                4,
+                5
+            ],
+            "description": "1=Lunes, 2=Martes, 3=Miércoles, 4=Jueves, 5=Viernes, 6=Sábado, 7=Domingo"
+        },
+        "holidays": {
+            "enabled": true,
+            "dates": [
+                "2025-01-01",
+                "2025-12-25"
+            ],
+            "description": "Lista de días festivos donde no se opera (formato YYYY-MM-DD)"
+        }
+    },
+    "validation_rules": {
+        "strict_mode": true,
+        "log_rejections": true,
+        "allow_weekend_testing": false,
+        "description": "strict_mode=true rechaza operaciones fuera de horario, false solo advierte"
+    }
+}

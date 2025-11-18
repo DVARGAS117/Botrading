@@ -1,0 +1,151 @@
+{
+  "description": "Configuración de sesiones VWAP y Opening Range por activo",
+  "version": "1.0.0",
+  "last_updated": "2025-11-17",
+  
+  "activos": {
+    "EURUSD": {
+      "session_name": "European Session",
+      "description": "Sesión europea con OR matutino",
+      "session_start_gmt": "08:00",
+      "session_end_gmt": "17:00",
+      "vwap_reset_time_gmt": "08:00",
+      "or_window": {
+        "start_gmt": "08:00",
+        "end_gmt": "08:30",
+        "duration_minutes": 30,
+        "description": "Opening Range primeros 30min de sesión europea"
+      },
+      "trading_hours_local": {
+        "timezone": "America/Lima",
+        "utc_offset": "-05:00",
+        "start": "03:00",
+        "end": "12:00",
+        "description": "Horario de trading permitido en zona horaria local"
+      },
+      "market_context_thresholds": {
+        "pre_market_end_gmt": "08:00",
+        "or_period_end_gmt": "08:30",
+        "mid_session_start_gmt": "10:00",
+        "end_of_session_start_gmt": "16:00"
+      }
+    },
+    
+    "GBPUSD": {
+      "session_name": "European Session",
+      "description": "Sesión europea con OR matutino",
+      "session_start_gmt": "08:00",
+      "session_end_gmt": "17:00",
+      "vwap_reset_time_gmt": "08:00",
+      "or_window": {
+        "start_gmt": "08:00",
+        "end_gmt": "08:30",
+        "duration_minutes": 30,
+        "description": "Opening Range primeros 30min de sesión europea"
+      },
+      "trading_hours_local": {
+        "timezone": "America/Lima",
+        "utc_offset": "-05:00",
+        "start": "03:00",
+        "end": "12:00",
+        "description": "Horario de trading permitido en zona horaria local"
+      },
+      "market_context_thresholds": {
+        "pre_market_end_gmt": "08:00",
+        "or_period_end_gmt": "08:30",
+        "mid_session_start_gmt": "10:00",
+        "end_of_session_start_gmt": "16:00"
+      }
+    },
+    
+    "XAUUSD": {
+      "session_name": "Asian/European Session",
+      "description": "Sesión asiática + europea con OR europeo",
+      "session_start_gmt": "01:00",
+      "session_end_gmt": "17:00",
+      "vwap_reset_time_gmt": "00:00",
+      "or_window": {
+        "start_gmt": "08:00",
+        "end_gmt": "08:30",
+        "duration_minutes": 30,
+        "description": "Opening Range sesión europea (referencia principal)"
+      },
+      "trading_hours_local": {
+        "timezone": "America/Lima",
+        "utc_offset": "-05:00",
+        "start": "03:00",
+        "end": "12:00",
+        "description": "Horario de trading permitido en zona horaria local"
+      },
+      "market_context_thresholds": {
+        "pre_market_end_gmt": "08:00",
+        "or_period_end_gmt": "08:30",
+        "mid_session_start_gmt": "10:00",
+        "end_of_session_start_gmt": "16:00"
+      }
+    },
+    
+    "US30": {
+      "session_name": "US Session",
+      "description": "Sesión estadounidense",
+      "session_start_gmt": "13:30",
+      "session_end_gmt": "20:00",
+      "vwap_reset_time_gmt": "13:30",
+      "or_window": {
+        "start_gmt": "13:30",
+        "end_gmt": "14:00",
+        "duration_minutes": 30,
+        "description": "Opening Range primeros 30min de apertura NYSE"
+      },
+      "trading_hours_local": {
+        "timezone": "America/Lima",
+        "utc_offset": "-05:00",
+        "start": "08:30",
+        "end": "15:00",
+        "description": "Horario de trading permitido en zona horaria local"
+      },
+      "market_context_thresholds": {
+        "pre_market_end_gmt": "13:30",
+        "or_period_end_gmt": "14:00",
+        "mid_session_start_gmt": "15:30",
+        "end_of_session_start_gmt": "19:00"
+      }
+    },
+    
+    "NAS100": {
+      "session_name": "US Session",
+      "description": "Sesión estadounidense",
+      "session_start_gmt": "13:30",
+      "session_end_gmt": "20:00",
+      "vwap_reset_time_gmt": "13:30",
+      "or_window": {
+        "start_gmt": "13:30",
+        "end_gmt": "14:00",
+        "duration_minutes": 30,
+        "description": "Opening Range primeros 30min de apertura NASDAQ"
+      },
+      "trading_hours_local": {
+        "timezone": "America/Lima",
+        "utc_offset": "-05:00",
+        "start": "08:30",
+        "end": "15:00",
+        "description": "Horario de trading permitido en zona horaria local"
+      },
+      "market_context_thresholds": {
+        "pre_market_end_gmt": "13:30",
+        "or_period_end_gmt": "14:00",
+        "mid_session_start_gmt": "15:30",
+        "end_of_session_start_gmt": "19:00"
+      }
+    }
+  },
+  
+  "notas": [
+    "session_start_gmt: Hora GMT de inicio de sesión (reinicio VWAP)",
+    "session_end_gmt: Hora GMT de fin de sesión oficial",
+    "vwap_reset_time_gmt: Hora exacta GMT para resetear VWAP (usualmente igual a session_start_gmt)",
+    "or_window: Ventana de tiempo para cálculo de Opening Range",
+    "trading_hours_local: Horario permitido para trading en hora local del bot (Lima, Perú)",
+    "market_context_thresholds: Umbrales para determinar contexto de mercado (PRE_MARKET, EUROPEAN_SESSION, etc.)"
+  ]
+}

@@ -86,6 +86,12 @@ class IndicatorStyle:
         rsi_period: Período del RSI
         show_macd: Si mostrar MACD en panel separado
         macd_params: Parámetros MACD (fast, slow, signal)
+        show_vwap: Si mostrar VWAP con bandas
+        show_vwap_bands: Si mostrar bandas VWAP (±1σ, ±2σ)
+        show_opening_range: Si mostrar Opening Range
+        vwap_color: Color de línea VWAP
+        vwap_bands_colors: Colores para bandas [±1σ, ±2σ]
+        or_color: Color para líneas Opening Range
     """
     show_emas: bool = False
     ema_periods: List[int] = field(default_factory=lambda: [20, 50])
@@ -94,6 +100,12 @@ class IndicatorStyle:
     rsi_period: int = 14
     show_macd: bool = False
     macd_params: Tuple[int, int, int] = (12, 26, 9)
+    show_vwap: bool = False
+    show_vwap_bands: bool = False
+    show_opening_range: bool = False
+    vwap_color: str = '#0066CC'  # Azul intenso
+    vwap_bands_colors: List[str] = field(default_factory=lambda: ['#FF8800', '#CC0000'])  # Naranja, Rojo
+    or_color: str = '#00AA00'  # Verde
     
     def __post_init__(self):
         """Validar parámetros de indicadores"""
@@ -190,7 +202,9 @@ class ChartGenerator:
         self,
         ohlcv_data: OHLCVData,
         title: str,
-        filename: Optional[str] = None
+        filename: Optional[str] = None,
+        vwap_data: Optional[Dict[str, Any]] = None,
+        or_data: Optional[Dict[str, float]] = None
     ) -> str:
         """
         Genera un gráfico de velas japonesas con los datos proporcionados.
@@ -199,6 +213,11 @@ class ChartGenerator:
             ohlcv_data: Datos OHLCV para el gráfico
             title: Título del gráfico
             filename: Nombre del archivo (opcional, se genera automático si None)
+            vwap_data: Datos VWAP con bandas (opcional)
+                      {'vwap': pd.Series, 'upper_1': pd.Series, 'upper_2': pd.Series,
+                       'lower_1': pd.Series, 'lower_2': pd.Series}
+            or_data: Datos Opening Range (opcional)
+                    {'high': float, 'low': float}
             
         Returns:
             str: Ruta completa del archivo PNG generado
@@ -221,8 +240,8 @@ class ChartGenerator:
             # Ruta completa del archivo
             output_path = Path(self.config.output_dir) / filename
             
-            # Configurar plots adicionales (EMAs, etc)
-            addplot_list = self._build_addplots(df)
+            # Configurar plots adicionales (EMAs, VWAP, etc)
+            addplot_list = self._build_addplots(df, vwap_data)
             
             # Configurar estilo mplfinance
             style = mpf.make_mpf_style(base_mpf_style=self.config.chart_style.style_type)
@@ -254,6 +273,10 @@ class ChartGenerator:
             # Solo agregar addplot si hay indicadores
             if addplot_list:
                 plot_kwargs['addplot'] = addplot_list
+            
+            # Agregar líneas horizontales para Opening Range
+            if or_data and self.config.indicator_style.show_opening_range:
+                plot_kwargs['hlines'] = self._build_hlines(or_data)
             
             mpf.plot(df, **plot_kwargs)
             
@@ -343,12 +366,13 @@ class ChartGenerator:
         
         return df
     
-    def _build_addplots(self, df: pd.DataFrame) -> Optional[List]:
+    def _build_addplots(self, df: pd.DataFrame, vwap_data: Optional[Dict[str, Any]] = None) -> Optional[List]:
         """
         Construye lista de plots adicionales (indicadores) para mplfinance.
         
         Args:
             df: DataFrame con datos OHLCV
+            vwap_data: Datos VWAP con bandas (opcional)
             
         Returns:
             Lista de objetos make_addplot o None si no hay indicadores
@@ -365,11 +389,92 @@ class ChartGenerator:
                     mpf.make_addplot(ema, color=color, width=1.5, label=f'EMA{period}')
                 )
         
+        # Agregar VWAP y bandas si están disponibles
+        if vwap_data and self.config.indicator_style.show_vwap:
+            # VWAP principal (línea azul gruesa)
+            if 'vwap' in vwap_data:
+                addplot_list.append(
+                    mpf.make_addplot(
+                        vwap_data['vwap'],
+                        color=self.config.indicator_style.vwap_color,
+                        width=2.5,
+                        label='VWAP'
+                    )
+                )
+            
+            # Bandas VWAP
+            if self.config.indicator_style.show_vwap_bands:
+                band_colors = self.config.indicator_style.vwap_bands_colors
+                
+                # Bandas ±1σ (naranja, líneas discontinuas)
+                if 'upper_1' in vwap_data:
+                    addplot_list.append(
+                        mpf.make_addplot(
+                            vwap_data['upper_1'],
+                            color=band_colors[0],
+                            width=1.2,
+                            linestyle='--',
+                            label='+1σ'
+                        )
+                    )
+                if 'lower_1' in vwap_data:
+                    addplot_list.append(
+                        mpf.make_addplot(
+                            vwap_data['lower_1'],
+                            color=band_colors[0],
+                            width=1.2,
+                            linestyle='--',
+                            label='-1σ'
+                        )
+                    )
+                
+                # Bandas ±2σ (rojo, líneas punteadas)
+                if 'upper_2' in vwap_data:
+                    addplot_list.append(
+                        mpf.make_addplot(
+                            vwap_data['upper_2'],
+                            color=band_colors[1],
+                            width=1.0,
+                            linestyle=':',
+                            label='+2σ'
+                        )
+                    )
+                if 'lower_2' in vwap_data:
+                    addplot_list.append(
+                        mpf.make_addplot(
+                            vwap_data['lower_2'],
+                            color=band_colors[1],
+                            width=1.0,
+                            linestyle=':',
+                            label='-2σ'
+                        )
+                    )
+        
         # RSI y MACD requieren paneles separados
         # Por simplicidad en v1, solo soportamos EMAs superpuestas
         # TODO: Agregar soporte para RSI y MACD en paneles separados
         
         return addplot_list if addplot_list else None
+    
+    def _build_hlines(self, or_data: Dict[str, float]) -> Dict:
+        """
+        Construye configuración de líneas horizontales para Opening Range.
+        
+        Args:
+            or_data: Diccionario con 'high' y 'low' del Opening Range
+            
+        Returns:
+            Diccionario de configuración para hlines de mplfinance
+        """
+        hlines_dict = {
+            'hlines': [or_data['high'], or_data['low']],
+            'colors': [self.config.indicator_style.or_color, self.config.indicator_style.or_color],
+            'linestyle': '-',
+            'linewidths': 1.5,
+            'alpha': 0.7
+        }
+        
+        return hlines_dict
     
     def cleanup_old_charts(self, keep_last: int = 10) -> int:
         """
