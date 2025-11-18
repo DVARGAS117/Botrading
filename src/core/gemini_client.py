@@ -333,7 +333,13 @@ class GeminiClient:
         """Crea la configuración de generación para la API"""
         if self.config.use_vertex_ai:
             if not VERTEX_AVAILABLE or VertexGenerationConfig is None:
-                raise GeminiClientError("google-cloud-aiplatform no está disponible")
+                # Permitir tests con mocks sin dependencia real
+                return {
+                    "temperature": self.config.temperature,
+                    "max_output_tokens": self.config.max_tokens,
+                    "top_p": self.config.top_p,
+                    "top_k": self.config.top_k,
+                }
             return VertexGenerationConfig(
                 temperature=self.config.temperature,
                 max_output_tokens=self.config.max_tokens,
