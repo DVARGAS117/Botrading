@@ -37,8 +37,9 @@ class TestGeminiConfig:
         
         assert config.model == "gemini-3-pro-preview"
         assert config.temperature == 0.7
-        assert config.max_tokens == 2048
-        assert config.timeout == 30
+        # Ajustado a nuevos defaults ampliados (tokens y timeout)
+        assert config.max_tokens == 10240
+        assert config.timeout == 120
         assert config.retry_attempts == 3
     
     def test_config_creation_custom(self):

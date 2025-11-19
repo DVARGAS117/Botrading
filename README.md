@@ -24,7 +24,7 @@ Botrading es un sistema de trading automatizado que:
 - 🔄 **Orquesta múltiples bots** independientes con ciclos a inicio de hora
 - 💱 **Integra MetaTrader 5** para datos OHLCV, consulta de posiciones y gestión de órdenes
 -- 🧠 **IA Gemini vía Vertex AI (producción) con fallback opcional Google AI Studio**
-   - Modelo forzado por defecto: `gemini-2.5-pro` (override con `ALLOW_CUSTOM_GEMINI_MODEL=1`)
+   - Modelo forzado por defecto: `gemini-3-pro-preview` (override con `ALLOW_CUSTOM_GEMINI_MODEL=1`)
    - Fallback opcional: activar `ALLOW_GEMINI_FALLBACK=1` (requiere `GEMINI_API_KEY`)
    - Soporte dual: Vertex AI (Google Cloud) y Gemini API Studio (desarrollo)
    - Configurable sin cambiar código (variables de entorno)
@@ -127,7 +127,7 @@ BOTRADING/
 - Git
 - Cuenta MT5 (demo o real)
 - API Key de Vertex (Google Cloud) o alternativa Gemini API Studio
- API Key de Vertex (Google Cloud) obligatoria (`GOOGLE_API_KEY`). Fallback opcional Gemini API Studio (`GEMINI_API_KEY`) sólo si activas `ALLOW_GEMINI_FALLBACK=1`. Modelo por defecto: `gemini-2.5-pro` (override con `ALLOW_CUSTOM_GEMINI_MODEL=1`).
+ API Key de Vertex (Google Cloud) obligatoria (`GOOGLE_API_KEY`). Fallback opcional Gemini API Studio (`GEMINI_API_KEY`) sólo si activas `ALLOW_GEMINI_FALLBACK=1`. Modelo por defecto: `gemini-3-pro-preview` (override con `ALLOW_CUSTOM_GEMINI_MODEL=1`).
 
 ### Instalación
 
@@ -177,6 +177,47 @@ notepad .env
 ```bash
 pytest tests/ -v --cov=src
 ```
+
+### 🧠 Migración a gemini-3-pro-preview
+
+Cambios principales:
+- Límites ampliados: Vertex `max_tokens=5120`, SDK `max_tokens=10240`
+- Timeout extendido: 120s
+- Cálculo de costos integrado (SDK y Vertex)
+- Parser REST robusto y logging de respuesta cruda + decisión
+- Prompt VWAP enriquecido (pendiente, bandas, EMAs) para tests
+- Horario Bot1 ajustado (09:00–13:00 Lima)
+
+#### 💲 Precios gemini-3-pro-preview (por 1M tokens)
+| Nivel de Contexto | Input | Output |
+| ------------------ | ----- | ------ |
+| Estándar (≤ 128k)  | $2.00 | $12.00 |
+| Largo (> 128k)     | $4.00 | $18.00 |
+
+Conversión interna (por 1K tokens): estándar (0.002 / 0.012) · largo (0.004 / 0.018). Umbral largo: 128,000 tokens de entrada. Overrides: `G3_STD_INPUT_PER_1K`, `G3_STD_OUTPUT_PER_1K`.
+
+Archivo adicional sugerido: `docs/GEMINI_PRICING.md` (detalles y futuras extensiones).
+### 🗄️ Persistencia de Costos por Consulta (T33 Integrado)
+
+Cada consulta a la IA se persiste automáticamente en SQLite (`data/ia_queries.db`) mediante `IAQueryRepository` con:
+
+Campos principales:
+- `bot_id`, `ia_id`, `symbol`, `tipo_consulta`
+- `prompt`, `respuesta`
+- `tokens_input`, `tokens_output`, `tokens_total`
+- `costo_usd` (tarifa estándar vs largo contexto detectada dinámicamente)
+- `accion_decidida`, `created_at`
+
+Lógica:
+- El cálculo de costo se realiza en `GeminiClient` y `VertexAIClient` aplicando el umbral de 128k tokens de entrada.
+- Después de parsear la respuesta se registra la acción decidida normalizada (OPERAR / NO_OPERAR / CERRAR / ACTUALIZAR / MANTENER).
+- Modo `--save-prompts` evita consumo de tokens; en ese modo no se persiste costo real.
+
+Consultas futuras:
+- Consolidación diaria en `DailyMetricsRepository` (ya suma `costo_ia_total`).
+- Próximas extensiones: alertas de presupuesto, agregaciones por símbolo, dashboard mensual.
+
+Test asociado: `test_ia_query_persistence.py` verifica almacenamiento de tokens y costo por consulta.
 
 ---
 
@@ -385,9 +426,9 @@ Este proyecto es privado. Todos los derechos reservados.
 | Tickets Totales | 52 |
 | Épicas | 16 |
 | Tickets Completados | 12 |
-| Tests | 711 |
-| Cobertura | 87% |
-| Líneas de Código | ~4,700 |
+| Tests | 1303 |
+| Cobertura | 87% (ver htmlcov) |
+| Líneas de Código | ~5,000 |
 
 ---
 

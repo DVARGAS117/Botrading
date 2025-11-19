@@ -220,10 +220,20 @@ class GeminiClient:
         ```
     """
     
-    # Costos por 1000 tokens (valores aproximados para Gemini 2.5 Pro)
-    # Estos valores deben actualizarse según las tarifas oficiales
-    DEFAULT_COST_PER_1K_INPUT = 0.00025   # $0.00025 por 1K tokens de input
-    DEFAULT_COST_PER_1K_OUTPUT = 0.001     # $0.001 por 1K tokens de output
+    # Costos base por 1000 tokens (valores heredados anteriores)
+    DEFAULT_COST_PER_1K_INPUT = 0.00025   # Históricos gemini 2.5 (input)
+    DEFAULT_COST_PER_1K_OUTPUT = 0.001    # Históricos gemini 2.5 (output)
+
+    # Nuevos costos gemini-3-pro-preview (por 1K tokens, derivados de tabla proporcionada)
+    # Tabla usuario (por 1M tokens):
+    #   Estándar (≤128k): Input $2.00 / Output $12.00
+    #   Contexto Largo (>128k): Input $4.00 / Output $18.00
+    # Convertido a 1K: dividir entre 1000.
+    G3_STANDARD_INPUT_PER_1K = 2.00 / 1000      # 0.002
+    G3_STANDARD_OUTPUT_PER_1K = 12.00 / 1000    # 0.012
+    G3_LONGCTX_INPUT_PER_1K = 4.00 / 1000       # 0.004
+    G3_LONGCTX_OUTPUT_PER_1K = 18.00 / 1000     # 0.018
+    G3_LONG_CONTEXT_THRESHOLD = 128_000  # Umbral tokens de entrada para considerar contexto largo
     
     def __init__(
         self,
@@ -305,6 +315,22 @@ class GeminiClient:
         # Costos
         self._cost_per_1k_input_tokens = self.DEFAULT_COST_PER_1K_INPUT
         self._cost_per_1k_output_tokens = self.DEFAULT_COST_PER_1K_OUTPUT
+
+        # Ajustar automáticamente tarifas si modelo es gemini-3-pro-preview
+        if self.config.model.startswith("gemini-3-pro-preview"):
+            # Permitir override vía variables de entorno si se desea
+            env_in_std = os.getenv("G3_STD_INPUT_PER_1K")
+            env_out_std = os.getenv("G3_STD_OUTPUT_PER_1K")
+            try:
+                std_in = float(env_in_std) if env_in_std else self.G3_STANDARD_INPUT_PER_1K
+                std_out = float(env_out_std) if env_out_std else self.G3_STANDARD_OUTPUT_PER_1K
+                self._cost_per_1k_input_tokens = std_in
+                self._cost_per_1k_output_tokens = std_out
+                self.logger.info(
+                    f"Tarifas gemini-3 estándar aplicadas: input=${std_in}/1K output=${std_out}/1K (umbral largo contexto {self.G3_LONG_CONTEXT_THRESHOLD} tokens)"
+                )
+            except ValueError:
+                self.logger.warning("Variables de entorno de tarifas G3 inválidas, usando defaults estándar.")
         
         # Estadísticas de uso
         self._usage_stats = {
@@ -369,9 +395,16 @@ class GeminiClient:
         Returns:
             Costo en dólares
         """
-        cost_input = (tokens_input / 1000) * self._cost_per_1k_input_tokens
-        cost_output = (tokens_output / 1000) * self._cost_per_1k_output_tokens
-        return cost_input + cost_output
+        # Si modelo gemini-3 y superamos umbral largo contexto, recalcular con tarifas long context
+        if self.config.model.startswith("gemini-3-pro-preview") and tokens_input > self.G3_LONG_CONTEXT_THRESHOLD:
+            cost_in_rate = self.G3_LONGCTX_INPUT_PER_1K
+            cost_out_rate = self.G3_LONGCTX_OUTPUT_PER_1K
+        else:
+            cost_in_rate = self._cost_per_1k_input_tokens
+            cost_out_rate = self._cost_per_1k_output_tokens
+        cost_input = (tokens_input / 1000) * cost_in_rate
+        cost_output = (tokens_output / 1000) * cost_out_rate
+        return round(cost_input + cost_output, 8)
     
     def _validate_image_paths(self, image_paths: Optional[List[str]]) -> bool:
         """

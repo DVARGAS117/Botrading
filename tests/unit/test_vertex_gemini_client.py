@@ -44,13 +44,14 @@ def test_generate_vertex_response_builds_request_and_parses_response(monkeypatch
 
     # Act: call function
     module = importlib.import_module("src.services.vertex_gemini_client")
+    # Usar modelo actualizado gemini-3-pro-preview conforme migración
     result = module.generate_vertex_response(
         system_prompt="Responde EXACTAMENTE con: OK",
         user_prompt="OK",
         temperature=0.7,
         top_p=0.9,
         timeout=30,
-        model="gemini-2.5-pro",
+        model="gemini-3-pro-preview",
         api_key="AQ.fake_key",
         endpoint="https://aiplatform.googleapis.com/v1",
         max_output_tokens=48,
@@ -60,7 +61,7 @@ def test_generate_vertex_response_builds_request_and_parses_response(monkeypatch
     # Assert: HTTP call shape
     expected_url = (
         "https://aiplatform.googleapis.com/v1/publishers/google/models/"
-        "gemini-2.5-flash:generateContent?key=AQ.fake_key"
+        "gemini-3-pro-preview:generateContent?key=AQ.fake_key"
     )
     assert calls["url"] == expected_url
     assert calls["timeout"] == 30

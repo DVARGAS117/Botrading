@@ -34,12 +34,17 @@ from src.core.vwap_response_parser import VWAPResponseParser
 from src.core.vwap_prompt_builder import MarketContext
 from src.core.vertex_ai_client import VertexAIClient, VertexAIConfig
 from src.core.gemini_client import GeminiClient, GeminiConfig  # Fallback opcional si se requiere en futuro
+from src.core.ia_query_repository import IAQueryRepository, QueryType
 from src.core.dual_order_manager import DualOrderManager, DualOrderRequest
 from src.core.order_manager import OrderManager, OrderRequest, OrderType
 from src.core.position_sizer import PositionSizer
 from src.core.symbol_spec_extractor import SymbolSpecificationExtractor
 from src.core.magic_number_generator import MagicNumberGenerator
 from src.core.mt5_connector import MT5Connector, create_connector_from_credentials
+from src.core.mt5_connection import MT5Connection as _LegacyMT5Connection  # Compat para tests antiguos
+
+# Export legacy symbol esperado por algunos tests (@patch('src.bots.base.base_bot_operations.MT5Connection'))
+MT5Connection = _LegacyMT5Connection
 from src.core.config_loader import ConfigLoader, ConfigurationError
 from src.core.logger import get_bot_logger
 
@@ -151,6 +156,8 @@ class BaseBotOperations(ABC):
         self.response_parser: Optional[VWAPResponseParser] = None
         # Cliente IA (Vertex por defecto)
         self.ai_client: Optional[VertexAIClient] = None
+        # Repositorio de consultas IA (tokens y costos)
+        self.ia_query_repo: Optional[IAQueryRepository] = None
         # Gestión de órdenes / sizing / specs / magic
         self.order_manager: Optional[OrderManager] = None
         self.dual_order_manager: Optional[DualOrderManager] = None
@@ -243,6 +250,8 @@ class BaseBotOperations(ABC):
                     api_key=api_key,
                     config=VertexAIConfig(model=model_to_use)
                 )
+                # Inicializar repositorio de consultas IA (persistencia costo por consulta)
+                self.ia_query_repo = IAQueryRepository(Path("data/ia_queries.db"))
             except Exception as e:
                 # Fallback a Gemini solo si explícitamente disponible y variable de entorno lo permite
                 allow_fallback = os.getenv("ALLOW_GEMINI_FALLBACK") == "1"
@@ -255,6 +264,7 @@ class BaseBotOperations(ABC):
                             api_key=api_key,
                             config=GeminiConfig(model=self.config.ai_model)
                         )
+                        self.ia_query_repo = IAQueryRepository(Path("data/ia_queries.db"))
                     except Exception as eg:
                         raise BotOperationError(f"Fallo inicializando ambos clientes IA: {eg}") from eg
                 else:
@@ -470,22 +480,23 @@ class BaseBotOperations(ABC):
                 )
                 
                 # Consultar IA
-                ai_response = self._query_ai(system_prompt, user_prompt)
-                
-                if not ai_response:
+                response_obj, combined_prompt = self._query_ai(system_prompt, user_prompt)
+
+                if not response_obj or not response_obj.success:
                     self.logger.warning(f"No se obtuvo respuesta de IA para {symbol}")
                     continue
                 
                 # Parsear respuesta
                 # Log línea adicional: respuesta cruda antes de parsear
+                ai_raw_text = response_obj.content or ""
                 try:
-                    trimmed = ai_response.strip()
+                    trimmed = ai_raw_text.strip()
                     if len(trimmed) > 800:
                         trimmed = trimmed[:800] + "... [truncado]"
                     self.logger.info(f"respuesta original IA: {trimmed}")
                 except Exception:
                     self.logger.info("respuesta original IA: [no disponible por error de decodificación]")
-                decision = self.parse_ai_response(ai_response)
+                decision = self.parse_ai_response(ai_raw_text)
 
                 # Log línea adicional: resumen de decisión parseada
                 try:
@@ -499,6 +510,38 @@ class BaseBotOperations(ABC):
                 
                 # Ejecutar decisión
                 self._execute_decision(symbol, decision)
+
+                # Persistir consulta IA con costos/tokens si repo disponible
+                try:
+                    if self.ia_query_repo and isinstance(response_obj.tokens_input, int):
+                        accion_decidida = str(decision.get('accion') or '').upper()
+                        # Normalizar acción para almacenamiento
+                        if accion_decidida in ("ABRIR",):
+                            accion_decidida = "OPERAR"
+                        elif accion_decidida in ("ESPERAR",):
+                            accion_decidida = "NO_OPERAR"
+                        self.ia_query_repo.create_query(
+                            bot_id=self.config.bot_id,
+                            ia_id=1,  # Config única actual
+                            symbol=symbol,
+                            query_type=QueryType.EVALUATION,
+                            prompt=combined_prompt,
+                            response=ai_raw_text,
+                            tokens_input=response_obj.tokens_input or 0,
+                            tokens_output=response_obj.tokens_output or 0,
+                            cost_usd=response_obj.cost or 0.0,
+                            action_decided=accion_decidida
+                        )
+                        self.logger.info(
+                            "Consulta IA persistida",
+                            extra={
+                                'tokens_input': response_obj.tokens_input or 0,
+                                'tokens_output': response_obj.tokens_output or 0,
+                                'cost_usd': response_obj.cost or 0.0
+                            }
+                        )
+                except Exception as pe:
+                    self.logger.warning(f"No se pudo persistir consulta IA: {pe}")
                 
             except Exception as e:
                 self.logger.error(
@@ -577,7 +620,7 @@ class BaseBotOperations(ABC):
             )
             return None
     
-    def _query_ai(self, system_prompt: str, user_prompt: str, max_retries: int = 3) -> Optional[str]:
+    def _query_ai(self, system_prompt: str, user_prompt: str, max_retries: int = 3) -> Tuple[Optional[Any], str]:
         """
         Consulta a la IA con retry automático.
         
@@ -587,7 +630,7 @@ class BaseBotOperations(ABC):
             max_retries: Máximo número de reintentos
         
         Returns:
-            Respuesta de la IA o None si falla
+            Tuple (GeminiResponse|None, combined_prompt)
         """
         for attempt in range(1, max_retries + 1):
             try:
@@ -626,7 +669,9 @@ class BaseBotOperations(ABC):
                         self.logger.info(f"💾 Prompt guardado en: {filename}")
                         self.logger.info("✅ Modo validación: Prompt generado sin consultar a Gemini (--save-prompts activo)")
                         # Retornar respuesta simulada sin consultar a Gemini (ahorra tokens)
-                        return "[PROMPT_ONLY_MODE] No se realizó consulta a Gemini. Revisar archivo generado."
+                        from src.core.gemini_client import GeminiResponse
+                        dummy = GeminiResponse(success=True, content="[PROMPT_ONLY_MODE]", tokens_input=0, tokens_output=0, cost=0.0)
+                        return dummy, combined_prompt
                     except Exception as e:
                         self.logger.warning(f"No se pudo guardar prompt: {e}")
                         return None
@@ -635,7 +680,7 @@ class BaseBotOperations(ABC):
 
                 if response_obj and response_obj.success:
                     self.logger.info(f"✅ Respuesta IA obtenida (intento {attempt})")
-                    return response_obj.content or ""
+                    return response_obj, combined_prompt
                 
             except Exception as e:
                 self.logger.warning(
@@ -647,9 +692,8 @@ class BaseBotOperations(ABC):
                     self.logger.error(
                         f"❌ No se pudo obtener respuesta de IA después de {max_retries} intentos"
                     )
-                    return None
-        
-        return None
+                    return None, combined_prompt
+        return None, combined_prompt
     
     def _execute_decision(self, symbol: str, decision: Dict[str, Any]) -> None:
         """

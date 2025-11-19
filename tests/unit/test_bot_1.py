@@ -198,21 +198,21 @@ class TestBot1Integration:
         """Fixture de bot"""
         return Bot1Strategy(bot_config)
     
-    @patch('src.bots.base.base_bot_operations.MT5Connection')
+    @patch('src.bots.base.base_bot_operations.create_connector_from_credentials')
     @patch('src.bots.base.base_bot_operations.MT5DataExtractor')
     @patch('src.bots.base.base_bot_operations.VertexAIClient')
     def test_full_initialization(
         self,
         mock_vertex,
         mock_extractor,
-        mock_mt5,
+        mock_connector_factory,
         bot
     ):
         """Test inicialización completa con mocks"""
-        # Mock conexión MT5 exitosa
-        mock_mt5_instance = MagicMock()
-        mock_mt5_instance.connect.return_value = True
-        mock_mt5.return_value = mock_mt5_instance
+        # Mock factory de connector y verificación exitosa
+        mock_connector = MagicMock()
+        mock_connector.verify_connection.return_value = True
+        mock_connector_factory.return_value = mock_connector
         
         # Inicializar
         result = bot.initialize()
@@ -220,15 +220,16 @@ class TestBot1Integration:
         # Verificar
         assert result is True
         assert bot.is_initialized is True
-        mock_mt5_instance.connect.assert_called_once()
+        mock_connector_factory.assert_called_once()
+        mock_connector.verify_connection.assert_called_once()
     
-    @patch('src.bots.base.base_bot_operations.MT5Connection')
-    def test_initialization_failure(self, mock_mt5, bot):
+    @patch('src.bots.base.base_bot_operations.create_connector_from_credentials')
+    def test_initialization_failure(self, mock_connector_factory, bot):
         """Test fallo en inicialización"""
-        # Mock conexión MT5 fallida
-        mock_mt5_instance = MagicMock()
-        mock_mt5_instance.connect.return_value = False
-        mock_mt5.return_value = mock_mt5_instance
+        # Mock verificación fallida
+        mock_connector = MagicMock()
+        mock_connector.verify_connection.side_effect = Exception("Fallo de conexión")
+        mock_connector_factory.return_value = mock_connector
         
         # Inicializar
         result = bot.initialize()

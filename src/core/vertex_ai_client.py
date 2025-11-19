@@ -16,6 +16,7 @@ from pathlib import Path
 
 import src.services.vertex_gemini_client as vertex_module
 from src.core.gemini_client import GeminiResponse
+import logging
 
 
 @dataclass
@@ -109,19 +110,40 @@ class VertexAIClient:
             usage = result.get("usage", {}) or {}
             tokens_in = int(usage.get("promptTokenCount") or 0)
             tokens_out = int(usage.get("candidatesTokenCount") or 0)
+            finish = result.get('finish_reason')
 
-            # Logging explícito de uso y configuración
-            import logging
-            logging.getLogger(__name__).info(
-                f"Uso IA: prompt_tokens={tokens_in} output_tokens={tokens_out} max_config={self.config.max_tokens} finish_reason={result.get('finish_reason')}"
-            )
+            # Estimación de costos para gemini-3-pro-preview (misma lógica que GeminiClient)
+            cost = None
+            if self.config.model.startswith("gemini-3-pro-preview"):
+                # Tarifas por 1K tokens (estándar vs largo contexto)
+                STD_IN = 2.00 / 1000
+                STD_OUT = 12.00 / 1000
+                LONG_IN = 4.00 / 1000
+                LONG_OUT = 18.00 / 1000
+                LONG_THRESHOLD = 128_000
+                if tokens_in > LONG_THRESHOLD:
+                    in_rate = LONG_IN
+                    out_rate = LONG_OUT
+                    pricing_tier = "long_context"
+                else:
+                    in_rate = STD_IN
+                    out_rate = STD_OUT
+                    pricing_tier = "standard"
+                cost = round((tokens_in/1000)*in_rate + (tokens_out/1000)*out_rate, 8)
+                logging.getLogger(__name__).info(
+                    f"Uso IA: tier={pricing_tier} prompt_tokens={tokens_in} output_tokens={tokens_out} cost=${cost} finish_reason={finish}"
+                )
+            else:
+                logging.getLogger(__name__).info(
+                    f"Uso IA: prompt_tokens={tokens_in} output_tokens={tokens_out} finish_reason={finish}"
+                )
 
             return GeminiResponse(
                 success=True,
                 content=result.get("text", ""),
                 tokens_input=tokens_in,
                 tokens_output=tokens_out,
-                cost=None,
+                cost=cost,
                 latency=latency,
             )
 

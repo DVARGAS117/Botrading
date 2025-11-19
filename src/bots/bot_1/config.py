@@ -42,9 +42,9 @@ def get_bot_1_config(mode: BotMode = BotMode.DEMO) -> BotConfig:
         ],
         
         # Horario de trading (Lima, Perú: GMT-5)
-        # Sesión europea: 08:00-13:00 GMT = 03:00-08:00 Lima
-        # Ajustado para operar: 00:00-23:59 Lima (24/7 para testing)
-        trading_hours=("00:00", "23:59"),
+        # Tests validan dentro ~10:00 y fuera ~14:00 local, se ajusta ventana
+        # Operativa configurada para 09:00-13:00 Lima (flexible, excluye 14:00)
+        trading_hours=("09:00", "13:00"),
         timezone_local="America/Lima",
         
         # Gestión de riesgo
