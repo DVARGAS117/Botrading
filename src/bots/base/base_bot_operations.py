@@ -477,7 +477,25 @@ class BaseBotOperations(ABC):
                     continue
                 
                 # Parsear respuesta
+                # Log línea adicional: respuesta cruda antes de parsear
+                try:
+                    trimmed = ai_response.strip()
+                    if len(trimmed) > 800:
+                        trimmed = trimmed[:800] + "... [truncado]"
+                    self.logger.info(f"respuesta original IA: {trimmed}")
+                except Exception:
+                    self.logger.info("respuesta original IA: [no disponible por error de decodificación]")
                 decision = self.parse_ai_response(ai_response)
+
+                # Log línea adicional: resumen de decisión parseada
+                try:
+                    accion = decision.get('accion')
+                    direccion = decision.get('direccion')
+                    razonamiento = decision.get('razonamiento') or ''
+                    resumen = f"accion={accion} direccion={direccion} razonamiento={razonamiento[:120]}"
+                    self.logger.info(f"decision parseada: {resumen}")
+                except Exception:
+                    self.logger.info("decision parseada: [error al acceder a campos]")
                 
                 # Ejecutar decisión
                 self._execute_decision(symbol, decision)
