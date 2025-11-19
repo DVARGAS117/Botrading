@@ -216,11 +216,8 @@ NO sugieras operaciones contra la dirección del VWAP bajo ninguna circunstancia
         for timeframe in [Timeframe.M5, Timeframe.M1, Timeframe.H1]:
             if timeframe in indicators:
                 ind = indicators[timeframe]
-                # Manejar tanto enums como strings
-                if hasattr(timeframe, 'value'):
-                    tf_name = timeframe.value.upper()
-                else:
-                    tf_name = str(timeframe).upper()
+                # Usar siempre el nombre del enum (M1, M5, H1) para evitar errores con valores int
+                tf_name = timeframe.name.upper()
                 
                 lines.append(f"### {tf_name}")
                 

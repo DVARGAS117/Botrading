@@ -29,6 +29,8 @@ def _build_payload(
     top_p: float,
     max_output_tokens: int,
     safety_settings: Optional[List[Dict[str, Any]]] = None,
+    response_mime_type: Optional[str] = None,
+    response_modalities: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     contents = [
         {
@@ -37,13 +39,21 @@ def _build_payload(
         }
     ]
 
+    gen_cfg: Dict[str, Any] = {
+        "temperature": temperature,
+        "topP": top_p,
+        "maxOutputTokens": max_output_tokens,
+    }
+
+    # Forzar salida de texto cuando se solicite (útil para gemini-3)
+    if response_mime_type:
+        gen_cfg["responseMimeType"] = response_mime_type
+    if response_modalities:
+        gen_cfg["responseModalities"] = response_modalities
+
     payload: Dict[str, Any] = {
         "contents": contents,
-        "generationConfig": {
-            "temperature": temperature,
-            "topP": top_p,
-            "maxOutputTokens": max_output_tokens,
-        },
+        "generationConfig": gen_cfg,
     }
 
     if system_prompt:
@@ -87,6 +97,8 @@ def generate_vertex_response(
     endpoint: str = "https://aiplatform.googleapis.com/v1",
     max_output_tokens: int = 1024,
     safety_settings: Optional[List[Dict[str, Any]]] = None,
+    response_mime_type: Optional[str] = None,
+    response_modalities: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Realiza una llamada a Vertex AI Gemini (REST) y retorna datos normalizados.
@@ -114,6 +126,8 @@ def generate_vertex_response(
         top_p=top_p,
         max_output_tokens=max_output_tokens,
         safety_settings=safety_settings,
+        response_mime_type=response_mime_type,
+        response_modalities=response_modalities,
     )
 
     headers = {"Content-Type": "application/json"}
