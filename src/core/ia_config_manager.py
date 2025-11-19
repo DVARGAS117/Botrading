@@ -198,9 +198,9 @@ class IAConfigManager:
                 "profiles": {
                     "gemini_pro": {
                         "provider": "gemini",
-                        "model": "gemini-2.5-pro",
+                        "model": "gemini-3-pro-preview",
                         "temperature": 0.7,
-                        "max_tokens": 1000
+                        "max_tokens": 5120,
                         "cost_per_1k_tokens": 0.005
                     }
                 },
