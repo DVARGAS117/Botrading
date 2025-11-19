@@ -35,7 +35,7 @@ class TestGeminiConfig:
         """Verificar creación con valores por defecto"""
         config = GeminiConfig()
         
-        assert config.model == "gemini-2.5-pro"
+        assert config.model == "gemini-3-pro-preview"
         assert config.temperature == 0.7
         assert config.max_tokens == 2048
         assert config.timeout == 30

@@ -18,7 +18,7 @@ def test_vertex_ai_client_success(monkeypatch):
         }
 
     monkeypatch.setenv("GOOGLE_API_KEY", "AQ.fake")
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-pro")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3-pro-preview")
 
     import importlib
     rest_module = importlib.import_module("src.services.vertex_gemini_client")

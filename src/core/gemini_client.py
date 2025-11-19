@@ -76,7 +76,7 @@ class GeminiConfig:
         location: Región de Vertex AI (default us-central1)
         credentials_path: Ruta al archivo de credenciales JSON para Vertex AI
     """
-    model: str = "gemini-2.5-pro"
+    model: str = "gemini-3-pro-preview"
     temperature: float = 0.7
     max_tokens: int = 2048
     top_p: float = 0.9

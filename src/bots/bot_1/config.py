@@ -55,7 +55,7 @@ def get_bot_1_config(mode: BotMode = BotMode.DEMO) -> BotConfig:
         reevaluation_interval_minutes=10,
         
         # Modelo de IA
-        ai_model="gemini-2.5-pro",
+        ai_model="gemini-3-pro-preview",
         
         # Órdenes duales (Market + Limit)
         enable_dual_orders=True,

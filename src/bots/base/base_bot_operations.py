@@ -87,7 +87,7 @@ class BotConfig:
     risk_per_trade: float = 0.5  # 0.5%
     max_daily_risk: float = 2.0  # 2R
     reevaluation_interval_minutes: int = 10
-    ai_model: str = "gemini-2.5-pro"  # Enforced por VertexAIConfig
+    ai_model: str = "gemini-3-pro-preview"  # Enforced por VertexAIConfig
     enable_dual_orders: bool = True
     log_level: str = "INFO"
     save_prompts: bool = False  # Si True: solo genera .txt SIN consultar Gemini (modo validación)
@@ -233,11 +233,11 @@ class BaseBotOperations(ABC):
                     raise BotOperationError("Falta API key de Gemini en config/credentials.json")
                 
                 model_to_use = self.config.ai_model
-                if model_to_use != "gemini-2.5-pro" and os.getenv("ALLOW_CUSTOM_GEMINI_MODEL") != "1":
+                if model_to_use != "gemini-3-pro-preview" and os.getenv("ALLOW_CUSTOM_GEMINI_MODEL") != "1":
                     self.logger.warning(
-                        f"Modelo '{model_to_use}' reemplazado por 'gemini-2.5-pro' (enforcement)"
+                        f"Modelo '{model_to_use}' reemplazado por 'gemini-3-pro-preview' (enforcement)"
                     )
-                    model_to_use = "gemini-2.5-pro"
+                    model_to_use = "gemini-3-pro-preview"
                     self.config.ai_model = model_to_use
                 self.ai_client = VertexAIClient(
                     api_key=api_key,
