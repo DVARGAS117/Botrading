@@ -25,7 +25,8 @@ class VertexAIConfig:
     # Quintuplicado respecto al valor anterior (1024 -> 5120)
     max_tokens: int = 5120
     top_p: float = 1.0
-    timeout: int = 30
+    # Ampliar timeout para razonamiento profundo (30 -> 120 segundos)
+    timeout: int = 120
     endpoint: str = os.getenv("GEMINI_VERTEX_ENDPOINT", "https://aiplatform.googleapis.com/v1")
     project_id: Optional[str] = os.getenv("VERTEX_PROJECT_ID")
     location: str = os.getenv("VERTEX_LOCATION", "us-central1")

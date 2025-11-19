@@ -82,7 +82,8 @@ class GeminiConfig:
     max_tokens: int = 10240
     top_p: float = 0.9
     top_k: int = 40
-    timeout: int = 30
+    # Ampliar timeout para sesiones con razonamiento extenso (30 -> 120)
+    timeout: int = 120
     retry_attempts: int = 3
     backoff_factor: float = 2.0
     use_vertex_ai: bool = False
