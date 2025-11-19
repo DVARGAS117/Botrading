@@ -15,6 +15,8 @@ Nota: Este cliente es independiente del SDK `google-generativeai` y usa `request
 
 from typing import Any, Dict, List, Optional
 import requests
+import json
+import logging
 
 
 def _build_url(endpoint: str, model: str, api_key: str) -> str:
@@ -66,18 +68,65 @@ def _build_payload(
 
 
 def _parse_response(resp_json: Dict[str, Any]) -> Dict[str, Any]:
+    """Extrae texto y metadatos de la respuesta.
+
+    Fallbacks añadidos para modelos gemini-3 que pueden devolver estructuras
+    diferentes (p.ej. parts sin 'text', inlineData, functionCall, etc.).
+    Si no se encuentra texto, se serializa el primer candidato para inspección.
+    """
     text = ""
     finish_reason = None
     usage = resp_json.get("usageMetadata") or {}
 
     candidates = resp_json.get("candidates") or []
     if candidates:
-        cand0 = candidates[0]
+        cand0 = candidates[0] or {}
         finish_reason = cand0.get("finishReason")
         content = cand0.get("content") or {}
         parts = content.get("parts") or []
-        texts = [p.get("text", "") for p in parts if isinstance(p, dict)]
-        text = "".join(texts)
+        collected: List[str] = []
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            # Prioridad: 'text'
+            if "text" in part and part["text"]:
+                collected.append(str(part["text"]))
+                continue
+            # inlineData (binario) -> ignorar pero marcar
+            if "inlineData" in part:
+                collected.append("[inlineData]")
+                continue
+            # functionCall -> representar
+            if "functionCall" in part:
+                fc = part["functionCall"]
+                name = fc.get("name", "functionCall")
+                collected.append(f"[functionCall:{name}]")
+                continue
+            # executableCode / codeBlock
+            if "executableCode" in part:
+                collected.append("[executableCode]")
+                continue
+            if "code" in part:
+                collected.append(part.get("code", "[code]") )
+                continue
+            # Si nada coincide, añadir representación compacta
+            collected.append(json.dumps(part, ensure_ascii=False)[:200])
+
+        text = "".join(collected).strip()
+
+        # Fallback: si sigue vacío, serializar candidato completo
+        if not text:
+            try:
+                text = json.dumps(cand0, ensure_ascii=False)[:500]
+            except Exception:
+                text = ""
+
+    # Logging de depuración si vacío
+    if not text:
+        logging.getLogger(__name__).debug(
+            "Respuesta Gemini sin texto legible; estructura raw=%s",
+            json.dumps(resp_json, ensure_ascii=False)[:800]
+        )
 
     return {
         "text": text,

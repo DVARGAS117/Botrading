@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from typing import List, Optional
 import os
 import time
+import json
+from pathlib import Path
 
 import src.services.vertex_gemini_client as vertex_module
 from src.core.gemini_client import GeminiResponse
@@ -24,6 +26,8 @@ class VertexAIConfig:
     top_p: float = 1.0
     timeout: int = 30
     endpoint: str = os.getenv("GEMINI_VERTEX_ENDPOINT", "https://aiplatform.googleapis.com/v1")
+    project_id: Optional[str] = os.getenv("VERTEX_PROJECT_ID")
+    location: str = os.getenv("VERTEX_LOCATION", "us-central1")
 
     def __post_init__(self):
         """Enforce del modelo por defecto gemini-3-pro-preview salvo override manual.
@@ -40,6 +44,9 @@ class VertexAIConfig:
             raise ValueError(
                 f"Modelo '{self.model}' no permitido. Usa '{default_model}' o establece ALLOW_CUSTOM_GEMINI_MODEL=1 para override manual."
             )
+        # Si ya se proporcionó project_id y el endpoint no incluye la ruta de proyecto, complétalo
+        if self.project_id and "/projects/" not in self.endpoint:
+            self.endpoint = f"https://aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/{self.location}"
 
 
 class VertexAIClient:
@@ -52,6 +59,27 @@ class VertexAIClient:
         if not self.api_key:
             raise ValueError("Falta API key. Usa parámetro api_key o variable GOOGLE_API_KEY.")
         self.config = config or VertexAIConfig()
+
+        # Si no hay project_id configurado, intentar cargarlo de config/ia_config.json
+        if not self.config.project_id:
+            try:
+                cfg_path = Path("config/ia_config.json")
+                if cfg_path.exists():
+                    with open(cfg_path, "r", encoding="utf-8") as f:
+                        ia_cfg = json.load(f)
+                    proj = (ia_cfg.get("project_id") or "").strip()
+                    loc = (ia_cfg.get("location") or self.config.location).strip()
+                    # Ignorar placeholder por defecto
+                    if proj and proj.upper() != "YOUR_GCP_PROJECT_ID":
+                        self.config.project_id = proj
+                        self.config.location = loc or self.config.location
+            except Exception:
+                # No bloquear por problemas de lectura; seguirá usando endpoint base
+                pass
+
+        # Si tenemos project_id y el endpoint no incluye la ruta de proyecto, constrúyelo
+        if self.config.project_id and "/projects/" not in self.config.endpoint:
+            self.config.endpoint = f"https://aiplatform.googleapis.com/v1/projects/{self.config.project_id}/locations/{self.config.location}"
 
     def send_prompt(self, prompt: str, image_paths: Optional[List[str]] = None) -> GeminiResponse:
         if not prompt or not prompt.strip():
@@ -69,6 +97,9 @@ class VertexAIClient:
             endpoint=self.config.endpoint,
             max_output_tokens=self.config.max_tokens,
             safety_settings=None,
+            # Para gemini-3 se recomienda forzar salida en JSON de texto
+            response_mime_type="application/json",
+            response_modalities=["TEXT"],
         )
         latency = time.time() - start
 
