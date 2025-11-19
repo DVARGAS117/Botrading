@@ -196,7 +196,7 @@ class IAConfigManager:
             "ia_profiles": {
                 "default_profile": "gemini-pro",
                 "profiles": {
-                    "gemini_pro": {
+                    "gemini-pro": {
                         "provider": "gemini",
                         "model": "gemini-3-pro-preview",
                         "temperature": 0.7,
