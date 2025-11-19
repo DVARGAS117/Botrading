@@ -78,7 +78,8 @@ class GeminiConfig:
     """
     model: str = "gemini-3-pro-preview"
     temperature: float = 0.7
-    max_tokens: int = 2048
+    # Quintuplicar también para consistencia con Vertex (2048 -> 10240)
+    max_tokens: int = 10240
     top_p: float = 0.9
     top_k: int = 40
     timeout: int = 30

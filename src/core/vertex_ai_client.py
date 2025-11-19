@@ -22,7 +22,8 @@ from src.core.gemini_client import GeminiResponse
 class VertexAIConfig:
     model: str = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
     temperature: float = 0.0
-    max_tokens: int = 1024
+    # Quintuplicado respecto al valor anterior (1024 -> 5120)
+    max_tokens: int = 5120
     top_p: float = 1.0
     timeout: int = 30
     endpoint: str = os.getenv("GEMINI_VERTEX_ENDPOINT", "https://aiplatform.googleapis.com/v1")
@@ -107,6 +108,12 @@ class VertexAIClient:
             usage = result.get("usage", {}) or {}
             tokens_in = int(usage.get("promptTokenCount") or 0)
             tokens_out = int(usage.get("candidatesTokenCount") or 0)
+
+            # Logging explícito de uso y configuración
+            import logging
+            logging.getLogger(__name__).info(
+                f"Uso IA: prompt_tokens={tokens_in} output_tokens={tokens_out} max_config={self.config.max_tokens} finish_reason={result.get('finish_reason')}"
+            )
 
             return GeminiResponse(
                 success=True,
