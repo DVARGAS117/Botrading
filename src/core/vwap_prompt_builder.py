@@ -101,8 +101,8 @@ en seguimiento de tendencia (trend-following), NUNCA en reversiones.
 ## Sesión de Operación
 
 ### Horario
-- **Sesión europea**: 08:00 - 13:00 GMT (06:00 - 11:00 Lima)
-- **Opening Range (OR)**: 08:00 - 08:30 GMT (primeros 30 minutos)
+- **Sesión europea**: 08:00 - 13:00 GMT (03:00 - 08:00 Lima)
+- **Opening Range (OR)**: 08:00 - 08:30 GMT (03:00 - 03:30 Lima)
 
 ### Opening Range como Nivel Clave
 - OR define rango de consolidación inicial
@@ -191,17 +191,78 @@ NO sugieras operaciones contra la dirección del VWAP bajo ninguna circunstancia
             lines.append(f"- **OR Range**: {or_data.or_range:.5f} ({or_data.or_range * 10000:.1f} pips)")
             lines.append(f"- **OR Midpoint**: {or_data.or_midpoint:.5f}")
             lines.append(f"- **Precio Actual**: {or_data.current_price:.5f}")
-            lines.append(f"- **Estado**: {or_data.breakout_status.value.upper()}")
             
-            if or_data.breakout_status.value == "above":
+            # Manejar breakout_status (puede ser enum o string)
+            if hasattr(or_data.breakout_status, 'value'):
+                status_value = or_data.breakout_status.value
+            else:
+                status_value = str(or_data.breakout_status)
+            
+            lines.append(f"- **Estado**: {status_value.upper()}")
+            
+            if status_value == "above":
                 lines.append(f"  * Breakout alcista confirmado (+{or_data.distance_from_or_high * 10000:.1f} pips desde OR high)")
-            elif or_data.breakout_status.value == "below":
+            elif status_value == "below":
                 lines.append(f"  * Breakout bajista confirmado ({or_data.distance_from_or_low * 10000:.1f} pips desde OR low)")
             else:
                 lines.append(f"  * Precio dentro del rango, esperando breakout")
             
             lines.append("")
 
+        # Indicadores calculados por timeframe
+        lines.append("## Indicadores Técnicos")
+        lines.append("")
+        
+        for timeframe in [Timeframe.M5, Timeframe.M1, Timeframe.H1]:
+            if timeframe in indicators:
+                ind = indicators[timeframe]
+                # Manejar tanto enums como strings
+                if hasattr(timeframe, 'value'):
+                    tf_name = timeframe.value.upper()
+                else:
+                    tf_name = str(timeframe).upper()
+                
+                lines.append(f"### {tf_name}")
+                
+                # VWAP y bandas
+                if hasattr(ind, 'vwap') and ind.vwap is not None:
+                    lines.append(f"- **VWAP**: {ind.vwap:.5f}")
+                if hasattr(ind, 'vwap_upper_1') and ind.vwap_upper_1 is not None:
+                    lines.append(f"- **VWAP +1σ**: {ind.vwap_upper_1:.5f}")
+                if hasattr(ind, 'vwap_upper_2') and ind.vwap_upper_2 is not None:
+                    lines.append(f"- **VWAP +2σ**: {ind.vwap_upper_2:.5f}")
+                if hasattr(ind, 'vwap_lower_1') and ind.vwap_lower_1 is not None:
+                    lines.append(f"- **VWAP -1σ**: {ind.vwap_lower_1:.5f}")
+                if hasattr(ind, 'vwap_lower_2') and ind.vwap_lower_2 is not None:
+                    lines.append(f"- **VWAP -2σ**: {ind.vwap_lower_2:.5f}")
+                
+                # EMA
+                if hasattr(ind, 'ema_9') and ind.ema_9 is not None:
+                    lines.append(f"- **EMA 9**: {ind.ema_9:.5f}")
+                if hasattr(ind, 'ema_21') and ind.ema_21 is not None:
+                    lines.append(f"- **EMA 21**: {ind.ema_21:.5f}")
+                if hasattr(ind, 'ema_50') and ind.ema_50 is not None:
+                    lines.append(f"- **EMA 50**: {ind.ema_50:.5f}")
+                
+                # ATR
+                if hasattr(ind, 'atr_14') and ind.atr_14 is not None:
+                    lines.append(f"- **ATR 14**: {ind.atr_14:.5f} ({ind.atr_14 * 10000:.1f} pips)")
+                if hasattr(ind, 'atr_21') and ind.atr_21 is not None:
+                    lines.append(f"- **ATR 21**: {ind.atr_21:.5f} ({ind.atr_21 * 10000:.1f} pips)")
+                
+                # Precio actual
+                if hasattr(ind, 'close') and ind.close is not None:
+                    lines.append(f"- **Precio actual**: {ind.close:.5f}")
+                    
+                    # Distancia del precio al VWAP
+                    if hasattr(ind, 'vwap') and ind.vwap is not None:
+                        distance = ind.close - ind.vwap
+                        distance_pips = distance * 10000
+                        position = "encima" if distance > 0 else "debajo"
+                        lines.append(f"- **Posición vs VWAP**: {abs(distance_pips):.1f} pips {position}")
+                
+                lines.append("")
+        
         # Velas por timeframe (según especificaciones)
         if ohlcv_data:
             # M5: todas las velas de la sesión actual
@@ -248,7 +309,8 @@ NO sugieras operaciones contra la dirección del VWAP bajo ninguna circunstancia
     def build_complete_prompt(self,
                              indicators: Dict[Timeframe, IndicatorData],
                              or_data: Optional[OpeningRangeData],
-                             market_context: MarketContext) -> VWAPPromptData:
+                             market_context: MarketContext,
+                             ohlcv_data: Optional[Dict[Timeframe, object]] = None) -> VWAPPromptData:
         """
         Construye el prompt completo (system + user).
         
@@ -256,13 +318,14 @@ NO sugieras operaciones contra la dirección del VWAP bajo ninguna circunstancia
             indicators: Diccionario de indicadores por timeframe
             or_data: Datos del Opening Range (opcional)
             market_context: Contexto de mercado actual
+            ohlcv_data: Datos OHLCV por timeframe (opcional)
         
         Returns:
             VWAPPromptData con ambos prompts
         """
         return VWAPPromptData(
             system_prompt=self.build_system_prompt(),
-            user_prompt=self.build_user_prompt(indicators, or_data, market_context),
+            user_prompt=self.build_user_prompt(indicators, or_data, market_context, ohlcv_data),
             timestamp=datetime.now(),
             market_context=market_context
         )

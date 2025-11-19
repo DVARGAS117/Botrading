@@ -90,7 +90,7 @@ class BotConfig:
     ai_model: str = "gemini-2.5-pro"  # Enforced por VertexAIConfig
     enable_dual_orders: bool = True
     log_level: str = "INFO"
-    save_prompts: bool = False  # Guardar prompts enviados a IA en archivos .txt
+    save_prompts: bool = False  # Si True: solo genera .txt SIN consultar Gemini (modo validación)
     
     def __post_init__(self):
         """Validar configuración"""
@@ -606,8 +606,12 @@ class BaseBotOperations(ABC):
                             f.write("\n\n=== COMBINED PROMPT ===\n")
                             f.write(combined_prompt)
                         self.logger.info(f"💾 Prompt guardado en: {filename}")
+                        self.logger.info("✅ Modo validación: Prompt generado sin consultar a Gemini (--save-prompts activo)")
+                        # Retornar respuesta simulada sin consultar a Gemini (ahorra tokens)
+                        return "[PROMPT_ONLY_MODE] No se realizó consulta a Gemini. Revisar archivo generado."
                     except Exception as e:
                         self.logger.warning(f"No se pudo guardar prompt: {e}")
+                        return None
                 
                 response_obj = self.ai_client.send_prompt(combined_prompt)
 

@@ -115,11 +115,13 @@ class Bot1Strategy(BaseBotOperations):
             return system_prompt, user_prompt
             
         except Exception as e:
+            import traceback
             self.logger.error(
                 f"Error preparando datos para IA: {str(e)}",
                 extra={
                     'symbol': symbol,
-                    'error': str(e)
+                    'error': str(e),
+                    'traceback': traceback.format_exc()
                 }
             )
             raise

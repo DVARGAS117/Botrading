@@ -34,6 +34,8 @@ def parse_arguments():
     parser.add_argument('--interval', type=int, default=300)
     parser.add_argument('--symbols', type=str, nargs='+', default=['EURUSD'])
     parser.add_argument('--log-level', type=str, choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], default='INFO')
+    parser.add_argument('--save-prompts', action='store_true', 
+                        help='Generar prompt en .txt SIN consultar a Gemini (ahorra tokens)')
     return parser.parse_args()
 
 
@@ -67,6 +69,7 @@ def main():
         config = get_bot_2_config(mode=mode)
         config.symbols = args.symbols
         config.log_level = args.log_level
+        config.save_prompts = args.save_prompts
         
         bot = Bot2Strategy(config)
         

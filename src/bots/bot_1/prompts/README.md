@@ -16,9 +16,15 @@ prompts/
 ## 🎯 Uso
 
 ```bash
-# Activar guardado de prompts
-python -m src.bots.bot_1.main --save-prompts
+# Generar prompt SIN consultar a Gemini (modo validación - ahorra tokens)
+python -m src.bots.bot_1.main --save-prompts --single-cycle
+
+# Operación normal (consulta a Gemini)
+python -m src.bots.bot_1.main --single-cycle
 ```
+
+**⚠️ IMPORTANTE**: Cuando usas `--save-prompts`, el bot **NO consulta a Gemini**.
+Solo genera el archivo .txt para que valides el prompt. Esto ahorra tokens.
 
 ## 📄 Formato del archivo
 

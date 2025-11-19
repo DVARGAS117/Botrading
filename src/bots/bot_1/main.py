@@ -89,7 +89,7 @@ def parse_arguments():
     parser.add_argument(
         '--save-prompts',
         action='store_true',
-        help='Guardar prompts enviados a IA en archivos .txt para validación'
+        help='Generar prompt en .txt SIN consultar a Gemini (ahorra tokens, solo para validación)'
     )
     
     return parser.parse_args()
