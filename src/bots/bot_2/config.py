@@ -43,7 +43,7 @@ def get_bot_2_config(mode: BotMode = BotMode.DEMO) -> BotConfig:
         risk_per_trade=0.5,
         max_daily_risk=2.0,
         reevaluation_interval_minutes=10,
-        ai_model="gemini-2.0-flash-exp",
+        ai_model="gemini-2.5-pro",
         enable_dual_orders=True,
         log_level="INFO"
     )

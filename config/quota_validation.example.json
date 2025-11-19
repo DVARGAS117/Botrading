@@ -1,74 +1,58 @@
 {
     "_comment": "Configuración para el módulo QuotaValidator (T48)",
     "_description": "Este archivo configura la validación de cuota y disponibilidad del modelo IA para evitar fallos por límites de uso",
-    
     "quota_validation": {
         "enabled": true,
         "provider": "gemini",
-        
         "_enabled_comment": "Si es true, valida cuota antes de consultar IA. Si es false, permite consultas sin validar",
         "_provider_comment": "Provider de IA: 'gemini', 'openai', 'anthropic'. Solo gemini está implementado actualmente",
-        
         "check_interval_seconds": 300,
         "cache_duration_seconds": 60,
-        
         "_check_interval_seconds_comment": "Intervalo de verificación de cuota (5 minutos por defecto)",
         "_cache_duration_seconds_comment": "Duración del caché de validaciones (1 minuto por defecto) para reducir llamadas a API",
-        
         "quota_limits": {
             "requests_per_minute": 60,
             "requests_per_day": 1500,
             "tokens_per_minute": 32000,
             "tokens_per_day": 500000,
-            
             "_requests_per_minute_comment": "Límite de requests por minuto (según plan de Gemini)",
             "_requests_per_day_comment": "Límite de requests por día",
             "_tokens_per_minute_comment": "Límite de tokens por minuto (para gemini-2.5-pro)",
             "_tokens_per_day_comment": "Límite de tokens por día"
         },
-        
         "thresholds": {
             "warning_percentage": 80,
             "critical_percentage": 95,
-            
             "_warning_percentage_comment": "Porcentaje de uso para activar advertencia (80% = 48 de 60 requests)",
             "_critical_percentage_comment": "Porcentaje de uso para marcar como crítico (95% = 57 de 60 requests)"
         },
-        
         "retry": {
             "max_attempts": 3,
             "backoff_factor": 2,
             "timeout_seconds": 10,
-            
             "_max_attempts_comment": "Número máximo de reintentos ante fallos de red",
             "_backoff_factor_comment": "Factor de backoff exponencial (espera: 1s, 2s, 4s...)",
             "_timeout_seconds_comment": "Timeout para cada intento de consulta"
         },
-        
         "actions": {
             "on_warning": "log",
             "on_critical": "log_and_alert",
             "on_exceeded": "abort",
-            
             "_on_warning_comment": "Acción al alcanzar umbral de advertencia: 'log', 'alert', 'continue'",
             "_on_critical_comment": "Acción al alcanzar umbral crítico: 'log', 'log_and_alert', 'throttle'",
             "_on_exceeded_comment": "Acción al exceder cuota: 'abort', 'wait', 'fallback'"
         }
     },
-    
     "model_availability": {
         "check_on_startup": true,
         "check_before_each_request": false,
         "fallback_models": [
-            "gemini-2.0-flash",
-            "gemini-1.5-pro"
+            "gemini-2.5-pro"
         ],
-        
         "_check_on_startup_comment": "Verificar disponibilidad del modelo al iniciar el bot",
         "_check_before_each_request_comment": "Verificar antes de cada request (más seguro pero más lento)",
         "_fallback_models_comment": "Modelos alternativos si el principal no está disponible"
     },
-    
     "usage_examples": {
         "_example_1": "from src.core.quota_validator import QuotaValidator",
         "_example_2": "",

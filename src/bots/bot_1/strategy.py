@@ -71,7 +71,8 @@ class Bot1Strategy(BaseBotOperations):
         symbol: str,
         indicators: Dict,
         or_data: Optional[Any],
-        market_context: MarketContext
+        market_context: MarketContext,
+        ohlcv_data: Optional[Dict] = None
     ) -> Tuple[str, str]:
         """
         Prepara datos numéricos para enviar a la IA.
@@ -97,7 +98,8 @@ class Bot1Strategy(BaseBotOperations):
             system_prompt, user_prompt = self.prompt_builder.build_vwap_methodology_prompt(
                 indicators=indicators,
                 or_data=or_data,
-                market_context=market_context
+                market_context=market_context,
+                ohlcv_data=ohlcv_data
             )
             
             self.logger.debug(

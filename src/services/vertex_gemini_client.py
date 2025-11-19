@@ -97,7 +97,7 @@ def generate_vertex_response(
         temperature: Temperatura de generación
         top_p: Top-P sampling
         timeout: Timeout de la petición en segundos
-        model: Nombre del modelo (p.ej. gemini-2.5-flash)
+        model: Nombre del modelo (p.ej. gemini-2.5-pro)
         api_key: API key con acceso a Vertex AI
         endpoint: Endpoint base de Vertex (default v1)
         max_output_tokens: Máximo de tokens en la respuesta

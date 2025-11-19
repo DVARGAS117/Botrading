@@ -26,9 +26,7 @@ import logging
 from pathlib import Path
 import os
 
-from src.core.mt5_connection import MT5Connection
 from src.core.mt5_data_extractor import MT5DataExtractor, Timeframe
-from src.core.mock_market_data import MockMarketDataExtractor
 from src.core.indicator_calculator import IndicatorCalculator
 from src.core.opening_range_calculator import OpeningRangeCalculator
 from src.core.prompt_builder import PromptBuilder
@@ -36,7 +34,13 @@ from src.core.vwap_response_parser import VWAPResponseParser
 from src.core.vwap_prompt_builder import MarketContext
 from src.core.vertex_ai_client import VertexAIClient, VertexAIConfig
 from src.core.gemini_client import GeminiClient, GeminiConfig  # Fallback opcional si se requiere en futuro
-from src.core.dual_order_manager import DualOrderManager
+from src.core.dual_order_manager import DualOrderManager, DualOrderRequest
+from src.core.order_manager import OrderManager, OrderRequest, OrderType
+from src.core.position_sizer import PositionSizer
+from src.core.symbol_spec_extractor import SymbolSpecificationExtractor
+from src.core.magic_number_generator import MagicNumberGenerator
+from src.core.mt5_connector import MT5Connector, create_connector_from_credentials
+from src.core.config_loader import ConfigLoader, ConfigurationError
 from src.core.logger import get_bot_logger
 
 
@@ -68,7 +72,7 @@ class BotConfig:
         risk_per_trade: Riesgo por trade en porcentaje
         max_daily_risk: Riesgo máximo diario en múltiplos de R
         reevaluation_interval_minutes: Intervalo de reevaluación en minutos
-        ai_model: Modelo de IA a usar (ej: "gemini-2.0-flash-exp")
+        ai_model: Modelo de IA a usar (ej: "gemini-2.5-pro")
         enable_dual_orders: Si habilitar órdenes duales (Market + Limit)
         log_level: Nivel de logging (DEBUG, INFO, WARNING, ERROR)
     """
@@ -78,7 +82,7 @@ class BotConfig:
     mode: BotMode = BotMode.DEMO
     symbols: List[str] = field(default_factory=lambda: ["EURUSD"])
     timeframes: List[Timeframe] = field(default_factory=lambda: [Timeframe.M1, Timeframe.M5, Timeframe.H1])
-    trading_hours: Tuple[str, str] = ("06:00", "13:00")  # Lima time
+    trading_hours: Tuple[str, str] = ("00:00", "23:59")  # 24/7 para testing
     timezone_local: str = "America/Lima"
     risk_per_trade: float = 0.5  # 0.5%
     max_daily_risk: float = 2.0  # 2R
@@ -86,6 +90,7 @@ class BotConfig:
     ai_model: str = "gemini-2.5-pro"  # Enforced por VertexAIConfig
     enable_dual_orders: bool = True
     log_level: str = "INFO"
+    save_prompts: bool = False  # Guardar prompts enviados a IA en archivos .txt
     
     def __post_init__(self):
         """Validar configuración"""
@@ -138,7 +143,7 @@ class BaseBotOperations(ABC):
         self.logger = get_bot_logger(f"Bot{config.bot_id}_{config.bot_name}")
         
         # Componentes core (se inicializan en initialize())
-        self.mt5_connection: Optional[MT5Connection] = None
+        self.mt5_connection: Optional[MT5Connector] = None
         self.data_extractor: Optional[MT5DataExtractor] = None
         self.indicator_calculator: Optional[IndicatorCalculator] = None
         self.or_calculator: Optional[OpeningRangeCalculator] = None
@@ -146,7 +151,12 @@ class BaseBotOperations(ABC):
         self.response_parser: Optional[VWAPResponseParser] = None
         # Cliente IA (Vertex por defecto)
         self.ai_client: Optional[VertexAIClient] = None
-        self.order_manager: Optional[DualOrderManager] = None
+        # Gestión de órdenes / sizing / specs / magic
+        self.order_manager: Optional[OrderManager] = None
+        self.dual_order_manager: Optional[DualOrderManager] = None
+        self.position_sizer: Optional[PositionSizer] = None
+        self.symbol_spec_extractor: Optional[SymbolSpecificationExtractor] = None
+        self.magic_number_generator: Optional[MagicNumberGenerator] = None
         
         # Estado del bot
         self.is_initialized = False
@@ -175,17 +185,32 @@ class BaseBotOperations(ABC):
         """
         try:
             self.logger.info("Iniciando inicialización de componentes...")
+            # Log de diagnóstico de intérprete y versión
+            import sys
+            self.logger.debug(
+                "Diagnóstico intérprete Python",
+                extra={
+                    'python_executable': sys.executable,
+                    'python_version': sys.version,
+                }
+            )
             
-            # 1-2. Fuente de datos (mock o MT5 real)
-            if os.getenv("MOCK_MARKET_DATA") == "1":
-                self.logger.warning("Usando MockMarketDataExtractor (MOCK_MARKET_DATA=1)")
-                self.mt5_connection = None
-                self.data_extractor = MockMarketDataExtractor()
-            else:
-                self.mt5_connection = MT5Connection()
-                if not self.mt5_connection.connect():
-                    raise BotOperationError("No se pudo conectar a MT5")
-                self.data_extractor = MT5DataExtractor(self.mt5_connection)
+            # 1. Conexión real a MT5 (sin mocks)
+            try:
+                creds_path = Path("config/credentials.json")
+                if not creds_path.exists():
+                    raise BotOperationError("No se encontró config/credentials.json para MT5")
+                loader = ConfigLoader()
+                creds = loader.load_json_config(str(creds_path))
+                # Soporte para estructuras {mt5: {...}} o planas
+                mt5_creds = creds.get("mt5", creds)
+                self.mt5_connection = create_connector_from_credentials(mt5_creds, logger=self.logger)
+                self.mt5_connection.verify_connection()
+            except (ConfigurationError, Exception) as e:
+                raise BotOperationError(f"Error al configurar/conectar MT5: {e}")
+
+            # 2. Extractor de datos MT5
+            self.data_extractor = MT5DataExtractor(self.mt5_connection)
             
             # 3. Indicator Calculator
             self.indicator_calculator = IndicatorCalculator()
@@ -201,6 +226,12 @@ class BaseBotOperations(ABC):
             
             # 7. AI Client (Vertex por defecto)
             try:
+                # Load API key from credentials
+                gemini_creds = creds.get("gemini", {})
+                api_key = gemini_creds.get("api_key")
+                if not api_key:
+                    raise BotOperationError("Falta API key de Gemini en config/credentials.json")
+                
                 model_to_use = self.config.ai_model
                 if model_to_use != "gemini-2.5-pro" and os.getenv("ALLOW_CUSTOM_GEMINI_MODEL") != "1":
                     self.logger.warning(
@@ -209,7 +240,7 @@ class BaseBotOperations(ABC):
                     model_to_use = "gemini-2.5-pro"
                     self.config.ai_model = model_to_use
                 self.ai_client = VertexAIClient(
-                    api_key=os.getenv("GOOGLE_API_KEY"),
+                    api_key=api_key,
                     config=VertexAIConfig(model=model_to_use)
                 )
             except Exception as e:
@@ -221,7 +252,7 @@ class BaseBotOperations(ABC):
                     )
                     try:
                         self.ai_client = GeminiClient(
-                            api_key=os.getenv("GEMINI_API_KEY"),
+                            api_key=api_key,
                             config=GeminiConfig(model=self.config.ai_model)
                         )
                     except Exception as eg:
@@ -229,15 +260,24 @@ class BaseBotOperations(ABC):
                 else:
                     raise BotOperationError(f"Fallo inicializando VertexAIClient: {e}") from e
             
-            # 8. Order Manager (si dual orders habilitado)
-            if self.config.enable_dual_orders:
-                try:
-                    self.order_manager = DualOrderManager(self.mt5_connection)
-                except Exception as oe:
-                    self.logger.warning(
-                        f"No se pudo inicializar DualOrderManager (continuando sin dual orders): {oe}",
-                        extra={'error': str(oe)}
+            # 8. Order Manager + DualOrderManager + helpers
+            try:
+                self.order_manager = OrderManager(self.mt5_connection, logger=self.logger)
+                self.position_sizer = PositionSizer(logger=self.logger)
+                self.magic_number_generator = MagicNumberGenerator(logger=self.logger)
+                self.symbol_spec_extractor = SymbolSpecificationExtractor(self.mt5_connection, logger=self.logger)
+                if self.config.enable_dual_orders:
+                    self.dual_order_manager = DualOrderManager(
+                        order_manager=self.order_manager,
+                        position_sizer=self.position_sizer,
+                        magic_number_generator=self.magic_number_generator,
+                        logger=self.logger
                     )
+            except Exception as oe:
+                self.logger.warning(
+                    f"No se pudo inicializar gestores de órdenes: {oe}",
+                    extra={'error': str(oe)}
+                )
             
             self.is_initialized = True
             self.logger.info("✅ Todos los componentes inicializados correctamente")
@@ -258,8 +298,6 @@ class BaseBotOperations(ABC):
         Returns:
             bool: True si estamos en horario de trading
         """
-        if os.getenv("IGNORE_TRADING_HOURS") == "1":
-            return True
         now = datetime.now()
         current_time = now.time()
         
@@ -347,7 +385,8 @@ class BaseBotOperations(ABC):
         symbol: str,
         indicators: Dict,
         or_data: Optional[Any],
-        market_context: MarketContext
+        market_context: MarketContext,
+        ohlcv_data: Optional[Dict] = None
     ) -> Tuple[str, str]:
         """
         Prepara los datos para enviar a la IA.
@@ -413,7 +452,7 @@ class BaseBotOperations(ABC):
                 self.logger.info(f"📊 Procesando {symbol}...")
                 
                 # Extraer datos y calcular indicadores
-                indicators = self._calculate_all_indicators(symbol)
+                indicators, ohlcv_data_dict = self._calculate_all_indicators(symbol)
                 
                 # Calcular Opening Range
                 or_data = self._calculate_opening_range(symbol)
@@ -426,7 +465,8 @@ class BaseBotOperations(ABC):
                     symbol=symbol,
                     indicators=indicators,
                     or_data=or_data,
-                    market_context=market_context
+                    market_context=market_context,
+                    ohlcv_data=ohlcv_data_dict
                 )
                 
                 # Consultar IA
@@ -445,12 +485,11 @@ class BaseBotOperations(ABC):
             except Exception as e:
                 self.logger.error(
                     f"Error procesando {symbol}: {str(e)}",
-                    extra={'symbol': symbol, 'error': str(e)},
-                    exc_info=True
+                    extra={'symbol': symbol, 'error': str(e)}
                 )
                 continue
     
-    def _calculate_all_indicators(self, symbol: str) -> Dict:
+    def _calculate_all_indicators(self, symbol: str) -> Tuple[Dict, Dict]:
         """
         Extrae datos y calcula indicadores para todos los timeframes.
         
@@ -458,16 +497,27 @@ class BaseBotOperations(ABC):
             symbol: Símbolo del activo
         
         Returns:
-            Dict con indicadores por timeframe
+            Tuple: (indicators dict, ohlcv_data dict) por timeframe
         """
         indicators = {}
+        ohlcv_data_dict = {}
         
         for timeframe in self.config.timeframes:
+            # Determinar cantidad de velas según timeframe
+            if timeframe == Timeframe.M1:
+                count = 200  # Timeframe de timing: 200 velas M1
+            elif timeframe == Timeframe.M5:
+                count = 100  # Timeframe principal: velas de sesión (aprox 60-100)
+            elif timeframe == Timeframe.H1:
+                count = 50   # Timeframe de contexto: mínimo 50 para EMA50 (aunque user dijo 30 max)
+            else:
+                count = 100  # Default
+            
             # Extraer datos OHLCV
             ohlcv_data = self.data_extractor.get_ohlcv(
                 symbol=symbol,
                 timeframe=timeframe,
-                count=100  # Suficiente para EMA50 (ver DATA_REQUIREMENTS.md)
+                count=count
             )
             
             # Calcular indicadores
@@ -476,8 +526,9 @@ class BaseBotOperations(ABC):
             )
             
             indicators[timeframe] = indicator_data
+            ohlcv_data_dict[timeframe] = ohlcv_data
         
-        return indicators
+        return indicators, ohlcv_data_dict
     
     def _calculate_opening_range(self, symbol: str) -> Optional[Any]:
         """
@@ -524,6 +575,40 @@ class BaseBotOperations(ABC):
             try:
                 # Unificar prompts para Vertex (no soporta system separado en nuestro wrapper)
                 combined_prompt = f"{system_prompt}\n\n{user_prompt}" if system_prompt else user_prompt
+                
+                # Guardar prompt si está habilitado
+                if self.config.save_prompts:
+                    from datetime import datetime
+                    from pathlib import Path
+                    
+                    # Crear carpeta de prompts dentro del directorio del bot
+                    # Estructura: src/bots/bot_X/prompts/YYYYMMDD/
+                    bot_dir = Path(__file__).parent.parent / f"bot_{self.config.bot_id}"
+                    prompts_dir = bot_dir / "prompts" / datetime.now().strftime("%Y%m%d")
+                    prompts_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    symbol = self.config.symbols[0] if self.config.symbols else 'unknown'
+                    filename = prompts_dir / f"prompt_{timestamp}_{symbol}.txt"
+                    
+                    try:
+                        with open(filename, 'w', encoding='utf-8') as f:
+                            f.write(f"=== PROMPT ENVIADO A IA ===\n")
+                            f.write(f"Timestamp: {datetime.now().isoformat()}\n")
+                            f.write(f"Bot: {self.config.bot_name} (ID: {self.config.bot_id})\n")
+                            f.write(f"Símbolo: {symbol}\n")
+                            f.write(f"Modo: {self.config.mode.value}\n")
+                            f.write(f"Intento: {attempt}\n\n")
+                            f.write("=== SYSTEM PROMPT ===\n")
+                            f.write(system_prompt or "None")
+                            f.write("\n\n=== USER PROMPT ===\n")
+                            f.write(user_prompt)
+                            f.write("\n\n=== COMBINED PROMPT ===\n")
+                            f.write(combined_prompt)
+                        self.logger.info(f"💾 Prompt guardado en: {filename}")
+                    except Exception as e:
+                        self.logger.warning(f"No se pudo guardar prompt: {e}")
+                
                 response_obj = self.ai_client.send_prompt(combined_prompt)
 
                 if response_obj and response_obj.success:
@@ -552,8 +637,14 @@ class BaseBotOperations(ABC):
             symbol: Símbolo del activo
             decision: Decisión parseada de la IA
         """
-        accion = decision.get("accion", "NO_OPERAR")
-        
+        accion_raw = decision.get("accion", "NO_OPERAR")
+        accion = str(accion_raw).upper()
+        # Aceptar sinónimos provenientes de parseadores alternativos
+        if accion in ("ABRIR",):
+            accion = "OPERAR"
+        if accion in ("ESPERAR",):
+            accion = "NO_OPERAR"
+
         if accion == "OPERAR":
             self._execute_open_position(symbol, decision)
         elif accion == "MANTENER":
@@ -572,13 +663,107 @@ class BaseBotOperations(ABC):
             extra={'decision': decision}
         )
         
-        # TODO: Implementar apertura usando DualOrderManager
-        # if self.config.enable_dual_orders:
-        #     self.order_manager.open_dual_position(...)
-        # else:
-        #     # Orden simple
-        
-        pass
+        try:
+            if not self.mt5_connection or not self.order_manager:
+                self.logger.error("Gestores de órdenes no inicializados")
+                return
+
+            # Dirección
+            dir_raw = (decision.get("direccion") or "").lower()
+            if dir_raw in ("comprar", "long"):
+                direction = "buy"
+            elif dir_raw in ("vender", "short"):
+                direction = "sell"
+            elif dir_raw in ("buy", "sell"):
+                direction = dir_raw
+            else:
+                self.logger.warning(f"Dirección inválida/ausente en decisión: '{dir_raw}'")
+                return
+
+            # Precios
+            entry_price = decision.get("precio_entrada")
+            stop_loss = decision.get("stop_loss")
+            take_profit = decision.get("take_profit") or decision.get("take_profit_1")
+
+            if not stop_loss or not take_profit:
+                self.logger.warning("Decisión sin SL/TP válidos; no se abrirá operación")
+                return
+
+            # Precio actual si no hay entrada explícita
+            tick = self.mt5_connection._mt5.symbol_info_tick(symbol)
+            if entry_price is None and tick is not None:
+                entry_price = tick.ask if direction == "buy" else tick.bid
+
+            # Balance de cuenta y especificaciones
+            account = self.mt5_connection.get_account_info()
+            balance = float(getattr(account, 'balance', 0.0))
+            symbol_spec = self.symbol_spec_extractor.get_symbol_specification(symbol)
+
+            risk_pct = float(self.config.risk_per_trade)
+
+            # Intentar apertura dual si está habilitado y tenemos precio límite
+            limit_price = decision.get("precio_limite")
+            use_dual = self.config.enable_dual_orders and self.dual_order_manager is not None and limit_price is not None
+
+            if use_dual:
+                req = DualOrderRequest(
+                    symbol=symbol,
+                    direction=direction,
+                    account_balance=balance,
+                    risk_percentage=risk_pct,
+                    entry_price=float(entry_price),
+                    stop_loss=float(stop_loss),
+                    take_profit=float(take_profit),
+                    limit_price=float(limit_price),
+                    bot_id=self.config.bot_id,
+                    ia_config_id=0,
+                    symbol_spec=symbol_spec,
+                    comment=f"Bot{self.config.bot_id}-{self.config.bot_name}"
+                )
+                result = self.dual_order_manager.open_dual_orders(req)
+                self.logger.info(
+                    "Órdenes duales enviadas",
+                    extra={
+                        'market_ticket': result.market_order.order if result.market_order else None,
+                        'limit_ticket': result.limit_order.order if result.limit_order else None,
+                        'lot_size': result.lot_size
+                    }
+                )
+            else:
+                # Apertura Market simple
+                order_type = OrderType.BUY if direction == "buy" else OrderType.SELL
+                # Magic number para orden simple
+                magic = 0
+                if self.magic_number_generator:
+                    magic = self.magic_number_generator.generate(
+                        bot_id=self.config.bot_id,
+                        ia_config_id=0,
+                        order_type="market"
+                    )
+                request = OrderRequest(
+                    symbol=symbol,
+                    order_type=order_type,
+                    volume=max(symbol_spec.volume_min, symbol_spec.volume_step),
+                    price=float(entry_price),
+                    sl=float(stop_loss),
+                    tp=float(take_profit),
+                    magic=magic,
+                    comment=f"Bot{self.config.bot_id}-{self.config.bot_name}"
+                )
+                result = self.order_manager.send_market_order(request)
+                self.logger.info(
+                    "Orden Market enviada",
+                    extra={
+                        'ticket': result.order,
+                        'price': result.price,
+                        'volume': result.volume
+                    }
+                )
+        except Exception as e:
+            self.logger.error(
+                f"Error al abrir posición en {symbol}: {e}",
+                extra={'error': str(e)}
+            )
     
     def _execute_close_position(self, symbol: str, decision: Dict[str, Any]) -> None:
         """Cierra posición abierta"""
@@ -587,8 +772,21 @@ class BaseBotOperations(ABC):
             extra={'decision': decision}
         )
         
-        # TODO: Implementar cierre
-        pass
+        try:
+            if not self.order_manager:
+                self.logger.error("OrderManager no inicializado")
+                return
+            ticket = decision.get("ticket")
+            if ticket:
+                self.order_manager.close_position(ticket=int(ticket))
+            else:
+                # Sin ticket explícito, evitar cerrar en masa por seguridad
+                self.logger.warning("Sin 'ticket' en decisión; cierre manual requerido")
+        except Exception as e:
+            self.logger.error(
+                f"Error al cerrar posición en {symbol}: {e}",
+                extra={'error': str(e)}
+            )
     
     def _execute_update_position(self, symbol: str, decision: Dict[str, Any]) -> None:
         """Actualiza SL/TP de posición abierta"""
@@ -597,8 +795,26 @@ class BaseBotOperations(ABC):
             extra={'decision': decision}
         )
         
-        # TODO: Implementar actualización
-        pass
+        try:
+            if not self.order_manager:
+                self.logger.error("OrderManager no inicializado")
+                return
+            ticket = decision.get("ticket")
+            new_sl = decision.get("nuevo_stop_loss")
+            new_tp = decision.get("nuevo_take_profit")
+            if not ticket or (new_sl is None and new_tp is None):
+                self.logger.warning("Faltan 'ticket' o nuevos valores SL/TP para actualizar")
+                return
+            self.order_manager.modify_position(
+                ticket=int(ticket),
+                sl=float(new_sl) if new_sl is not None else 0.0,
+                tp=float(new_tp) if new_tp is not None else 0.0
+            )
+        except Exception as e:
+            self.logger.error(
+                f"Error al actualizar posición en {symbol}: {e}",
+                extra={'error': str(e)}
+            )
     
     def shutdown(self) -> None:
         """

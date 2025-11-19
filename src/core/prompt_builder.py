@@ -673,7 +673,8 @@ Para REEVALUACIÓN, usa uno de estos formatos:
         self,
         indicators: Dict,
         or_data: Optional[Any],
-        market_context: Any
+        market_context: Any,
+        ohlcv_data: Optional[Dict] = None
     ) -> tuple[str, str]:
         """
         Construye prompts usando VWAP Methodology específica.
@@ -717,7 +718,8 @@ Para REEVALUACIÓN, usa uno de estos formatos:
         user_prompt = vwap_builder.build_user_prompt(
             indicators=indicators,
             or_data=or_data,
-            market_context=market_context
+            market_context=market_context,
+            ohlcv_data=ohlcv_data
         )
         
         return system_prompt, user_prompt

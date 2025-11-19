@@ -75,7 +75,7 @@ class IAProfile:
     Atributos:
         name: Nombre identificador del perfil
         provider: Provider de IA (gemini, openai, anthropic)
-        model: Modelo específico (gemini-1.5-pro, gpt-4, claude-3, etc.)
+        model: Modelo específico (gemini-2.5-pro, gpt-4, claude-3, etc.)
         temperature: Temperatura del modelo (0-2, default 0.7)
         max_tokens: Máximo de tokens por respuesta (default 1000)
         top_p: Top-p sampling (default 0.9)
@@ -137,7 +137,7 @@ class IAConfigManager:
                 "profiles": {
                     "gemini-pro": {
                         "provider": "gemini",
-                        "model": "gemini-1.5-pro",
+                        "model": "gemini-2.5-pro",
                         "temperature": 0.7
                     },
                     "gpt-4": {
@@ -196,11 +196,11 @@ class IAConfigManager:
             "ia_profiles": {
                 "default_profile": "gemini-pro",
                 "profiles": {
-                    "gemini-pro": {
+                    "gemini_pro": {
                         "provider": "gemini",
-                        "model": "gemini-1.5-pro",
+                        "model": "gemini-2.5-pro",
                         "temperature": 0.7,
-                        "max_tokens": 1000,
+                        "max_tokens": 1000
                         "cost_per_1k_tokens": 0.005
                     }
                 },

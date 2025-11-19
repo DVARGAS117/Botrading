@@ -50,7 +50,7 @@ def test_gemini_api_real():
         # Configuración básica para Google AI Studio
         config = GeminiConfig(
             use_vertex_ai=False,  # Usar Google AI Studio
-            model="gemini-1.5-flash",  # Modelo disponible y económico
+            model="gemini-2.5-pro",
             temperature=0.7,
             max_tokens=512
         )

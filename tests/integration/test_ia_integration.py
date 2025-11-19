@@ -48,7 +48,7 @@ class TestIAIntegrationEvaluacion:
     def mock_gemini_client(self):
         """Fixture que retorna un GeminiClient mockeado"""
         with patch('src.core.gemini_client.genai'):
-            config = GeminiConfig(model="gemini-2.0-flash-exp")
+            config = GeminiConfig(model="gemini-2.5-pro")
             client = GeminiClient(api_key="test_api_key", config=config)
             return client
     
