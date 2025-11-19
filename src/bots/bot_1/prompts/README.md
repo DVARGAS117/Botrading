@@ -1,0 +1,48 @@
+# 📝 Prompts de Bot 1 - Numérico Baseline
+
+Esta carpeta contiene los prompts enviados a Gemini 2.5 Pro cuando se ejecuta el bot con el flag `--save-prompts`.
+
+## 📁 Estructura
+
+```
+prompts/
+├── YYYYMMDD/                    # Carpeta por fecha
+│   ├── prompt_HHMMSS_SYMBOL.txt
+│   ├── prompt_HHMMSS_SYMBOL.txt
+│   └── ...
+└── README.md
+```
+
+## 🎯 Uso
+
+```bash
+# Generar prompt SIN consultar a Gemini (modo validación - ahorra tokens)
+python -m src.bots.bot_1.main --save-prompts --single-cycle
+
+# Operación normal (consulta a Gemini)
+python -m src.bots.bot_1.main --single-cycle
+```
+
+**⚠️ IMPORTANTE**: Cuando usas `--save-prompts`, el bot **NO consulta a Gemini**.
+Solo genera el archivo .txt para que valides el prompt. Esto ahorra tokens.
+
+## 📄 Formato del archivo
+
+Cada archivo contiene:
+- **Metadata**: Timestamp, bot, símbolo, modo, intento
+- **System Prompt**: Instrucciones del sistema
+- **User Prompt**: Prompt del usuario con datos de mercado
+- **Combined Prompt**: Prompt final enviado a Gemini
+
+## 🔍 Ejemplo de uso
+
+Útil para:
+- ✅ Validar que el prompt contiene la información correcta
+- ✅ Debug de decisiones de la IA
+- ✅ Auditoría de consultas realizadas
+- ✅ Mejorar la calidad de los prompts
+- ✅ Análisis retrospectivo de operaciones
+
+## ⚠️ Nota
+
+Los archivos `.txt` están excluidos del control de versiones (git) para evitar llenar el repositorio.

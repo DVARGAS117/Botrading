@@ -5,9 +5,9 @@
         "default_profile": "gemini-pro",
         "profiles": {
             "gemini-pro": {
-                "_description": "Google Gemini 1.5 Pro - Modelo multimodal de alta capacidad",
+                "_description": "Google Gemini 2.5 Pro - Modelo multimodal de alta capacidad",
                 "provider": "gemini",
-                "model": "gemini-1.5-pro",
+                "model": "gemini-2.5-pro",
                 "temperature": 0.7,
                 "max_tokens": 2048,
                 "top_p": 0.9,
@@ -23,9 +23,9 @@
                 "fallback_profile": "gemini-flash"
             },
             "gemini-flash": {
-                "_description": "Google Gemini 1.5 Flash - Modelo rápido y eficiente",
+                "_description": "Google Gemini 2.5 Flash - Modelo rápido y eficiente (DEPRECADO - usar gemini-2.5-pro)",
                 "provider": "gemini",
-                "model": "gemini-1.5-flash",
+                "model": "gemini-2.5-pro",
                 "temperature": 0.7,
                 "max_tokens": 1024,
                 "top_p": 0.9,

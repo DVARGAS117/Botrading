@@ -19,7 +19,7 @@ def create_example_configs():
 
     configs = {
         "conservative": {
-            "model": "gemini-2.0-flash-exp",
+            "model": "gemini-2.5-pro",
             "temperature": 0.1,
             "max_tokens": 512,
             "timeout": 15,
@@ -83,7 +83,7 @@ def demonstrate_runtime_updates():
 
     # Crear cliente con configuración inicial
     initial_config = GeminiConfig(
-        model="gemini-2.0-flash-exp",
+        model="gemini-2.5-pro",
         temperature=0.5,
         max_tokens=1024,
         timeout=20

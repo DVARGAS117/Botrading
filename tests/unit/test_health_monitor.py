@@ -51,8 +51,9 @@ class TestHealthMonitor:
     def test_get_bot_status_with_recent_logs(self, temp_logs_dir, health_monitor):
         """Test obtener status con logs recientes"""
         # Crear archivo de log con entrada reciente
+        recent_time = (datetime.now() - timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:%S')
         log_file = temp_logs_dir / "bot_1_20251113.log"
-        log_content = "[2025-11-13 10:30:00] [bot_1] [INFO] Bot iniciado\n"
+        log_content = f"[{recent_time}] [bot_1] [INFO] Bot iniciado\n"
 
         with open(log_file, 'w', encoding='utf-8') as f:
             f.write(log_content)
@@ -67,8 +68,9 @@ class TestHealthMonitor:
     def test_get_bot_status_with_old_logs(self, temp_logs_dir, health_monitor):
         """Test obtener status con logs antiguos"""
         # Crear archivo de log con entrada antigua
+        old_time = (datetime.now() - timedelta(hours=3)).strftime('%Y-%m-%d %H:%M:%S')
         log_file = temp_logs_dir / "bot_1_20251113.log"
-        log_content = "[2025-11-12 10:30:00] [bot_1] [INFO] Bot iniciado\n"
+        log_content = f"[{old_time}] [bot_1] [INFO] Bot iniciado\n"
 
         log_file.write_text(log_content)
 
@@ -79,8 +81,9 @@ class TestHealthMonitor:
 
     def test_get_bot_status_with_errors(self, temp_logs_dir, health_monitor):
         """Test obtener status con errores en logs"""
+        recent_time = (datetime.now() - timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:%S')
         log_file = temp_logs_dir / "bot_1_20251113.log"
-        log_content = "[2025-11-13 10:30:00] [bot_1] [ERROR] Error de conexión\n"
+        log_content = f"[{recent_time}] [bot_1] [ERROR] Error de conexión\n"
 
         with open(log_file, 'w', encoding='utf-8') as f:
             f.write(log_content)
@@ -96,10 +99,11 @@ class TestHealthMonitor:
     def test_get_all_bots_status(self, temp_logs_dir, health_monitor):
         """Test obtener status de todos los bots"""
         # Crear logs para múltiples bots
+        recent_time = (datetime.now() - timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:%S')
         bots = ["bot_1", "bot_2", "bot_3"]
         for bot in bots:
             log_file = temp_logs_dir / f"{bot}_20251113.log"
-            log_content = f"[2025-11-13 10:30:00] [{bot}] [INFO] Bot iniciado\n"
+            log_content = f"[{recent_time}] [{bot}] [INFO] Bot iniciado\n"
 
             with open(log_file, 'w', encoding='utf-8') as f:
                 f.write(log_content)
@@ -120,8 +124,9 @@ class TestHealthMonitor:
     def test_check_anomalies_inactive_bots(self, temp_logs_dir, health_monitor):
         """Test detectar bots inactivos como anomalía"""
         # Crear log antiguo
+        old_time = (datetime.now() - timedelta(hours=3)).strftime('%Y-%m-%d %H:%M:%S')
         log_file = temp_logs_dir / "bot_1_20251113.log"
-        log_content = "[2025-11-12 10:30:00] [bot_1] [INFO] Bot iniciado\n"
+        log_content = f"[{old_time}] [bot_1] [INFO] Bot iniciado\n"
 
         with open(log_file, 'w', encoding='utf-8') as f:
             f.write(log_content)
@@ -134,8 +139,9 @@ class TestHealthMonitor:
 
     def test_check_anomalies_recent_errors(self, temp_logs_dir, health_monitor):
         """Test detectar errores recientes como anomalía"""
+        recent_time = (datetime.now() - timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:%S')
         log_file = temp_logs_dir / "bot_1_20251113.log"
-        log_content = "[2025-11-13 10:30:00] [bot_1] [ERROR] Error crítico\n"
+        log_content = f"[{recent_time}] [bot_1] [ERROR] Error crítico\n"
 
         with open(log_file, 'w', encoding='utf-8') as f:
             f.write(log_content)

@@ -29,6 +29,8 @@ def _build_payload(
     top_p: float,
     max_output_tokens: int,
     safety_settings: Optional[List[Dict[str, Any]]] = None,
+    response_mime_type: Optional[str] = None,
+    response_modalities: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     contents = [
         {
@@ -37,13 +39,21 @@ def _build_payload(
         }
     ]
 
+    gen_cfg: Dict[str, Any] = {
+        "temperature": temperature,
+        "topP": top_p,
+        "maxOutputTokens": max_output_tokens,
+    }
+
+    # Forzar salida de texto cuando se solicite (útil para gemini-3)
+    if response_mime_type:
+        gen_cfg["responseMimeType"] = response_mime_type
+    if response_modalities:
+        gen_cfg["responseModalities"] = response_modalities
+
     payload: Dict[str, Any] = {
         "contents": contents,
-        "generationConfig": {
-            "temperature": temperature,
-            "topP": top_p,
-            "maxOutputTokens": max_output_tokens,
-        },
+        "generationConfig": gen_cfg,
     }
 
     if system_prompt:
@@ -87,6 +97,8 @@ def generate_vertex_response(
     endpoint: str = "https://aiplatform.googleapis.com/v1",
     max_output_tokens: int = 1024,
     safety_settings: Optional[List[Dict[str, Any]]] = None,
+    response_mime_type: Optional[str] = None,
+    response_modalities: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Realiza una llamada a Vertex AI Gemini (REST) y retorna datos normalizados.
@@ -97,7 +109,7 @@ def generate_vertex_response(
         temperature: Temperatura de generación
         top_p: Top-P sampling
         timeout: Timeout de la petición en segundos
-        model: Nombre del modelo (p.ej. gemini-2.5-flash)
+        model: Nombre del modelo (p.ej. gemini-2.5-pro)
         api_key: API key con acceso a Vertex AI
         endpoint: Endpoint base de Vertex (default v1)
         max_output_tokens: Máximo de tokens en la respuesta
@@ -114,6 +126,8 @@ def generate_vertex_response(
         top_p=top_p,
         max_output_tokens=max_output_tokens,
         safety_settings=safety_settings,
+        response_mime_type=response_mime_type,
+        response_modalities=response_modalities,
     )
 
     headers = {"Content-Type": "application/json"}

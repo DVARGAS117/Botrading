@@ -51,7 +51,7 @@ async def ejemplo_basico_conversacion():
     api_key = os.getenv("GEMINI_API_KEY", "demo_key")
     
     config = GeminiConfig(
-        model="gemini-2.0-flash-exp",
+        model="gemini-2.5-pro",
         temperature=0.7,
         max_tokens=1024
     )

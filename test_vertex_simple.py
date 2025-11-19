@@ -6,7 +6,7 @@ Uso (PowerShell):
 
 Requiere variables de entorno:
     - GOOGLE_API_KEY
-    - GEMINI_MODEL (opcional, por defecto: gemini-2.5-flash)
+    - GEMINI_MODEL (opcional, por defecto: gemini-2.5-pro)
 """
 
 import os
@@ -18,7 +18,7 @@ from src.services.vertex_gemini_client import generate_vertex_response
 
 def main() -> int:
     api_key = os.getenv("GOOGLE_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
     endpoint = os.getenv("GEMINI_VERTEX_ENDPOINT", "https://aiplatform.googleapis.com/v1")
 
     if not api_key:

@@ -31,11 +31,11 @@ import os
 class TestGeminiConfig:
     """Tests para la configuración del cliente Gemini"""
     
-    def test_config_creation_defaults(self):
+    def test_config_creation_default(self):
         """Verificar creación con valores por defecto"""
         config = GeminiConfig()
         
-        assert config.model == "gemini-2.0-flash-exp"
+        assert config.model == "gemini-2.5-pro"
         assert config.temperature == 0.7
         assert config.max_tokens == 2048
         assert config.timeout == 30
@@ -196,7 +196,7 @@ class TestGeminiClient:
     def client(self, mock_api_key):
         """Fixture que retorna un cliente configurado"""
         config = GeminiConfig(
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-pro",
             temperature=0.7,
             max_tokens=1024,
             retry_attempts=3
@@ -216,7 +216,7 @@ class TestGeminiClient:
     def test_client_initialization(self, client):
         """Verificar inicialización correcta del cliente"""
         assert client is not None
-        assert client.config.model == "gemini-2.0-flash-exp"
+        assert client.config.model == "gemini-2.5-pro"
         assert client.config.temperature == 0.7
     
     def test_client_initialization_without_api_key(self):
@@ -555,7 +555,7 @@ class TestGeminiClientVertexAI:
             project_id="test-project-123",
             location="us-central1",
             credentials_path="/path/to/credentials.json",
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-pro",
             temperature=0.7,
             max_tokens=1024
         )

@@ -63,7 +63,7 @@ class GeminiConfig:
     Configuración para el cliente Gemini
     
     Atributos:
-        model: Nombre del modelo de Gemini (default: gemini-2.0-flash-exp)
+        model: Nombre del modelo de Gemini (default: gemini-2.5-pro)
         temperature: Temperatura del modelo (0-2, default 0.7)
         max_tokens: Máximo de tokens en la respuesta (default 2048)
         top_p: Top-p sampling (default 0.9)
@@ -76,7 +76,7 @@ class GeminiConfig:
         location: Región de Vertex AI (default us-central1)
         credentials_path: Ruta al archivo de credenciales JSON para Vertex AI
     """
-    model: str = "gemini-2.0-flash-exp"
+    model: str = "gemini-2.5-pro"
     temperature: float = 0.7
     max_tokens: int = 2048
     top_p: float = 0.9
@@ -201,7 +201,7 @@ class GeminiClient:
         ```python
         # Inicializar cliente
         config = GeminiConfig(
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-pro",
             temperature=0.7,
             max_tokens=1024
         )

@@ -142,7 +142,7 @@ Edita `config/ia_config.json`:
 ```json
 {
     "provider": "gemini",
-    "model": "gemini-2.0-flash-exp",
+    "model": "gemini-2.5-pro",
     "temperature": 0.7,
     "max_tokens": 2048,
     "timeout": 30,

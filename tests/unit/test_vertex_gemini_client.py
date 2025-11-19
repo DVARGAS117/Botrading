@@ -47,10 +47,10 @@ def test_generate_vertex_response_builds_request_and_parses_response(monkeypatch
     result = module.generate_vertex_response(
         system_prompt="Responde EXACTAMENTE con: OK",
         user_prompt="OK",
-        temperature=0.0,
-        top_p=1.0,
+        temperature=0.7,
+        top_p=0.9,
         timeout=30,
-        model="gemini-2.5-flash",
+        model="gemini-2.5-pro",
         api_key="AQ.fake_key",
         endpoint="https://aiplatform.googleapis.com/v1",
         max_output_tokens=48,

@@ -79,6 +79,18 @@ def parse_arguments():
         default='INFO',
         help='Nivel de logging (default: INFO)'
     )
+
+    parser.add_argument(
+        '--yes',
+        action='store_true',
+        help='Auto-confirma ejecución LIVE (salta prompt interactivo)'
+    )
+    
+    parser.add_argument(
+        '--save-prompts',
+        action='store_true',
+        help='Generar prompt en .txt SIN consultar a Gemini (ahorra tokens, solo para validación)'
+    )
     
     return parser.parse_args()
 
@@ -125,7 +137,7 @@ def main():
     mode = BotMode.LIVE if args.mode == 'live' else BotMode.DEMO
     
     # Confirmación para modo LIVE
-    if mode == BotMode.LIVE:
+    if mode == BotMode.LIVE and not args.yes:
         if not confirm_live_mode():
             logger.info("Operación cancelada por el usuario")
             print("\n❌ Operación cancelada. No se ejecutará en modo LIVE.")
@@ -138,6 +150,7 @@ def main():
         # Override símbolos y log level si se especificaron
         config.symbols = args.symbols
         config.log_level = args.log_level
+        config.save_prompts = args.save_prompts
         
         # Crear instancia del bot
         logger.info("Creando instancia de Bot 1...")
@@ -181,7 +194,7 @@ def main():
         print("\n⏹️  Bot detenido")
         
     except Exception as e:
-        logger.error(f"❌ Error crítico: {str(e)}", exc_info=True)
+        logger.error(f"❌ Error crítico: {str(e)}")
         print(f"\n❌ Error crítico: {str(e)}")
         print("Revisa los logs para más detalles")
         

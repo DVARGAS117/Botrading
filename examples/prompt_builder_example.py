@@ -70,7 +70,7 @@ def example_numeric_evaluation():
     # 3. Configurar y enviar a IA (Vertex por defecto)
     vertex_key = os.getenv("GOOGLE_API_KEY")
     if vertex_key:
-        vcfg = VertexAIConfig(model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
+        vcfg = VertexAIConfig(model=os.getenv("GEMINI_MODEL", "gemini-2.5-pro"))
         vclient = VertexAIClient(api_key=vertex_key, config=vcfg)
         response = vclient.send_prompt(prompt)
     else:
@@ -79,7 +79,7 @@ def example_numeric_evaluation():
         if api_key == "demo_key":
             print("\n⚠️  No hay GOOGLE_API_KEY ni GEMINI_API_KEY. Usando modo demo.")
             return
-        gcfg = GeminiConfig(model="gemini-2.0-flash-exp", temperature=0.7, max_tokens=1024, timeout=30, retry_attempts=3)
+        gcfg = GeminiConfig(model="gemini-2.5-pro", temperature=0.7, max_tokens=1024, timeout=30, retry_attempts=3)
         gclient = GeminiClient(api_key=api_key, config=gcfg)
         response = gclient.send_prompt(prompt)
         
@@ -298,7 +298,7 @@ def example_usage_statistics():
     # Mostrar estadísticas del cliente si se usa Gemini (en Vertex las exponemos por request)
     api_key = os.getenv("GEMINI_API_KEY")
     if api_key:
-        config = GeminiConfig(model="gemini-2.0-flash-exp")
+        config = GeminiConfig(model="gemini-2.5-pro")
         client = GeminiClient(api_key=api_key, config=config)
         stats = client.get_usage_statistics()
         

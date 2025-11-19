@@ -25,9 +25,11 @@ from src.core.mt5_data_extractor import Timeframe
 class MarketContext(Enum):
     """Contexto de mercado para construcción de prompt"""
     PRE_MARKET = "pre_market"  # Antes de apertura europea
-    EUROPEAN_SESSION = "european_session"  # Sesión europea activa
+    OPENING_RANGE = "opening_range"  # Durante Opening Range (08:00-08:30 GMT)
     POST_OR = "post_or"  # Después de Opening Range
+    EUROPEAN_SESSION = "european_session"  # Sesión europea activa
     END_OF_SESSION = "end_of_session"  # Cerca del cierre
+    POST_MARKET = "post_market"  # Después del cierre
 
 
 @dataclass
@@ -99,8 +101,8 @@ en seguimiento de tendencia (trend-following), NUNCA en reversiones.
 ## Sesión de Operación
 
 ### Horario
-- **Sesión europea**: 08:00 - 13:00 GMT (06:00 - 11:00 Lima)
-- **Opening Range (OR)**: 08:00 - 08:30 GMT (primeros 30 minutos)
+- **Sesión europea**: 08:00 - 13:00 GMT (03:00 - 08:00 Lima)
+- **Opening Range (OR)**: 08:00 - 08:30 GMT (03:00 - 03:30 Lima)
 
 ### Opening Range como Nivel Clave
 - OR define rango de consolidación inicial
@@ -160,7 +162,8 @@ NO sugieras operaciones contra la dirección del VWAP bajo ninguna circunstancia
     def build_user_prompt(self,
                          indicators: Dict[Timeframe, IndicatorData],
                          or_data: Optional[OpeningRangeData],
-                         market_context: MarketContext) -> str:
+                         market_context: MarketContext,
+                         ohlcv_data: Optional[Dict[Timeframe, object]] = None) -> str:
         """
         Construye el user prompt (variable) con indicadores y contexto actual.
         
@@ -188,81 +191,123 @@ NO sugieras operaciones contra la dirección del VWAP bajo ninguna circunstancia
             lines.append(f"- **OR Range**: {or_data.or_range:.5f} ({or_data.or_range * 10000:.1f} pips)")
             lines.append(f"- **OR Midpoint**: {or_data.or_midpoint:.5f}")
             lines.append(f"- **Precio Actual**: {or_data.current_price:.5f}")
-            lines.append(f"- **Estado**: {or_data.breakout_status.value.upper()}")
             
-            if or_data.breakout_status.value == "above":
+            # Manejar breakout_status (puede ser enum o string)
+            if hasattr(or_data.breakout_status, 'value'):
+                status_value = or_data.breakout_status.value
+            else:
+                status_value = str(or_data.breakout_status)
+            
+            lines.append(f"- **Estado**: {status_value.upper()}")
+            
+            if status_value == "above":
                 lines.append(f"  * Breakout alcista confirmado (+{or_data.distance_from_or_high * 10000:.1f} pips desde OR high)")
-            elif or_data.breakout_status.value == "below":
+            elif status_value == "below":
                 lines.append(f"  * Breakout bajista confirmado ({or_data.distance_from_or_low * 10000:.1f} pips desde OR low)")
             else:
                 lines.append(f"  * Precio dentro del rango, esperando breakout")
             
             lines.append("")
-        
-        # Indicadores por timeframe
+
+        # Indicadores calculados por timeframe
         lines.append("## Indicadores Técnicos")
         lines.append("")
         
-        for timeframe, data in sorted(indicators.items(), key=lambda x: x[0].value):
-            lines.append(f"### Timeframe {timeframe.name}")
-            
-            # VWAP (más importante)
-            if data.vwap is not None:
-                lines.append(f"**VWAP**: {data.vwap:.5f}")
-                lines.append(f"- Pendiente: {data.vwap_slope_description}")
+        for timeframe in [Timeframe.M5, Timeframe.M1, Timeframe.H1]:
+            if timeframe in indicators:
+                ind = indicators[timeframe]
+                # Usar siempre el nombre del enum (M1, M5, H1) para evitar errores con valores int
+                tf_name = timeframe.name.upper()
                 
-                if data.vwap_slope is not None:
-                    slope_pips = data.vwap_slope * 10000
-                    lines.append(f"- Slope numérico: {slope_pips:.2f} pips/período")
+                lines.append(f"### {tf_name}")
                 
-                # Bandas VWAP
-                if data.vwap_upper_1 is not None:
-                    lines.append(f"- Bandas VWAP:")
-                    lines.append(f"  * +2σ: {data.vwap_upper_2:.5f}")
-                    lines.append(f"  * +1σ: {data.vwap_upper_1:.5f}")
-                    lines.append(f"  * VWAP: {data.vwap:.5f}")
-                    lines.append(f"  * -1σ: {data.vwap_lower_1:.5f}")
-                    lines.append(f"  * -2σ: {data.vwap_lower_2:.5f}")
-            
-            # EMAs
-            if data.ema9 is not None or data.ema20 is not None:
-                lines.append(f"**EMAs**:")
-                if data.ema9 is not None:
-                    lines.append(f"- EMA9: {data.ema9:.5f}")
-                if data.ema20 is not None:
-                    lines.append(f"- EMA20: {data.ema20:.5f}")
-                if data.ema50 is not None:
-                    lines.append(f"- EMA50: {data.ema50:.5f}")
-            
-            # ATR
-            if data.atr_14 is not None or data.atr_21 is not None:
-                lines.append(f"**ATR (Volatilidad)**:")
-                if data.atr_14 is not None:
-                    atr_pips = data.atr_14 * 10000
-                    lines.append(f"- ATR(14): {data.atr_14:.5f} ({atr_pips:.1f} pips)")
-                if data.atr_21 is not None:
-                    atr_pips = data.atr_21 * 10000
-                    lines.append(f"- ATR(21): {data.atr_21:.5f} ({atr_pips:.1f} pips)")
-            
-            lines.append("")
+                # VWAP y bandas
+                if hasattr(ind, 'vwap') and ind.vwap is not None:
+                    lines.append(f"- **VWAP**: {ind.vwap:.5f}")
+                if hasattr(ind, 'vwap_upper_1') and ind.vwap_upper_1 is not None:
+                    lines.append(f"- **VWAP +1σ**: {ind.vwap_upper_1:.5f}")
+                if hasattr(ind, 'vwap_upper_2') and ind.vwap_upper_2 is not None:
+                    lines.append(f"- **VWAP +2σ**: {ind.vwap_upper_2:.5f}")
+                if hasattr(ind, 'vwap_lower_1') and ind.vwap_lower_1 is not None:
+                    lines.append(f"- **VWAP -1σ**: {ind.vwap_lower_1:.5f}")
+                if hasattr(ind, 'vwap_lower_2') and ind.vwap_lower_2 is not None:
+                    lines.append(f"- **VWAP -2σ**: {ind.vwap_lower_2:.5f}")
+                
+                # EMA
+                if hasattr(ind, 'ema_9') and ind.ema_9 is not None:
+                    lines.append(f"- **EMA 9**: {ind.ema_9:.5f}")
+                if hasattr(ind, 'ema_21') and ind.ema_21 is not None:
+                    lines.append(f"- **EMA 21**: {ind.ema_21:.5f}")
+                if hasattr(ind, 'ema_50') and ind.ema_50 is not None:
+                    lines.append(f"- **EMA 50**: {ind.ema_50:.5f}")
+                
+                # ATR
+                if hasattr(ind, 'atr_14') and ind.atr_14 is not None:
+                    lines.append(f"- **ATR 14**: {ind.atr_14:.5f} ({ind.atr_14 * 10000:.1f} pips)")
+                if hasattr(ind, 'atr_21') and ind.atr_21 is not None:
+                    lines.append(f"- **ATR 21**: {ind.atr_21:.5f} ({ind.atr_21 * 10000:.1f} pips)")
+                
+                # Precio actual
+                if hasattr(ind, 'close') and ind.close is not None:
+                    lines.append(f"- **Precio actual**: {ind.close:.5f}")
+                    
+                    # Distancia del precio al VWAP
+                    if hasattr(ind, 'vwap') and ind.vwap is not None:
+                        distance = ind.close - ind.vwap
+                        distance_pips = distance * 10000
+                        position = "encima" if distance > 0 else "debajo"
+                        lines.append(f"- **Posición vs VWAP**: {abs(distance_pips):.1f} pips {position}")
+                
+                lines.append("")
         
-        # Instrucciones de análisis
-        lines.append("## Instrucciones de Análisis")
-        lines.append("")
-        lines.append("Analiza los datos anteriores y proporciona:")
-        lines.append("1. **ESTADO_DEL_MERCADO**: ¿Cuál es la tendencia según VWAP? ¿Qué indica el OR?")
-        lines.append("2. **PLAN_DE_TRADING_ACTUAL**: ¿LONG, SHORT o NO_OPERAR? Justifica según metodología")
-        lines.append("3. **GESTIÓN_DE_POSICIONES**: Si hubiera posición abierta, ¿qué hacer?")
-        lines.append("4. **JOURNAL_Y_SCORE**: Confianza de la señal (1-10) y razonamiento")
-        lines.append("")
-        lines.append("**IMPORTANTE**: Opera SOLO a favor de la pendiente del VWAP. NO contra-tendencia.")
-        
+        # Velas por timeframe (según especificaciones)
+        if ohlcv_data:
+            # M5: todas las velas de la sesión actual
+            if Timeframe.M5 in ohlcv_data:
+                lines.append("## Velas M5 (sesión actual)")
+                lines.append("")
+                candles = ohlcv_data[Timeframe.M5].data
+                for idx, row in candles.iterrows():
+                    try:
+                        time_str = idx.strftime('%H:%M') if hasattr(idx, 'strftime') else str(idx)
+                        lines.append(f"- {time_str}: O={row['open']:.5f} H={row['high']:.5f} L={row['low']:.5f} C={row['close']:.5f} V={int(row['volume'])}")
+                    except:
+                        lines.append(f"- {idx}: O={row['open']:.5f} H={row['high']:.5f} L={row['low']:.5f} C={row['close']:.5f} V={int(row['volume'])}")
+                lines.append("")
+            
+            # M1: 200 velas (solo de la sesión actual o desde poco antes)
+            if Timeframe.M1 in ohlcv_data:
+                lines.append("## Velas M1 (200 velas - timing)")
+                lines.append("")
+                candles = ohlcv_data[Timeframe.M1].data.tail(200)  # Últimas 200
+                for idx, row in candles.iterrows():
+                    try:
+                        time_str = idx.strftime('%H:%M') if hasattr(idx, 'strftime') else str(idx)
+                        lines.append(f"- {time_str}: O={row['open']:.5f} H={row['high']:.5f} L={row['low']:.5f} C={row['close']:.5f} V={int(row['volume'])}")
+                    except:
+                        lines.append(f"- {idx}: O={row['open']:.5f} H={row['high']:.5f} L={row['low']:.5f} C={row['close']:.5f} V={int(row['volume'])}")
+                lines.append("")
+            
+            # H1: 30 velas máximo
+            if Timeframe.H1 in ohlcv_data:
+                lines.append("## Velas H1 (30 velas máximo - contexto)")
+                lines.append("")
+                candles = ohlcv_data[Timeframe.H1].data.tail(30)  # Últimas 30
+                for idx, row in candles.iterrows():
+                    try:
+                        time_str = idx.strftime('%H:%M') if hasattr(idx, 'strftime') else str(idx)
+                        lines.append(f"- {time_str}: O={row['open']:.5f} H={row['high']:.5f} L={row['low']:.5f} C={row['close']:.5f} V={int(row['volume'])}")
+                    except:
+                        lines.append(f"- {idx}: O={row['open']:.5f} H={row['high']:.5f} L={row['low']:.5f} C={row['close']:.5f} V={int(row['volume'])}")
+                lines.append("")
+            
         return "\n".join(lines)
     
     def build_complete_prompt(self,
                              indicators: Dict[Timeframe, IndicatorData],
                              or_data: Optional[OpeningRangeData],
-                             market_context: MarketContext) -> VWAPPromptData:
+                             market_context: MarketContext,
+                             ohlcv_data: Optional[Dict[Timeframe, object]] = None) -> VWAPPromptData:
         """
         Construye el prompt completo (system + user).
         
@@ -270,13 +315,14 @@ NO sugieras operaciones contra la dirección del VWAP bajo ninguna circunstancia
             indicators: Diccionario de indicadores por timeframe
             or_data: Datos del Opening Range (opcional)
             market_context: Contexto de mercado actual
+            ohlcv_data: Datos OHLCV por timeframe (opcional)
         
         Returns:
             VWAPPromptData con ambos prompts
         """
         return VWAPPromptData(
             system_prompt=self.build_system_prompt(),
-            user_prompt=self.build_user_prompt(indicators, or_data, market_context),
+            user_prompt=self.build_user_prompt(indicators, or_data, market_context, ohlcv_data),
             timestamp=datetime.now(),
             market_context=market_context
         )

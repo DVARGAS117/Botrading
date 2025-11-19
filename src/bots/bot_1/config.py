@@ -43,8 +43,8 @@ def get_bot_1_config(mode: BotMode = BotMode.DEMO) -> BotConfig:
         
         # Horario de trading (Lima, Perú: GMT-5)
         # Sesión europea: 08:00-13:00 GMT = 03:00-08:00 Lima
-        # Ajustado para operar: 06:00-13:00 Lima
-        trading_hours=("06:00", "13:00"),
+        # Ajustado para operar: 00:00-23:59 Lima (24/7 para testing)
+        trading_hours=("00:00", "23:59"),
         timezone_local="America/Lima",
         
         # Gestión de riesgo
@@ -55,7 +55,7 @@ def get_bot_1_config(mode: BotMode = BotMode.DEMO) -> BotConfig:
         reevaluation_interval_minutes=10,
         
         # Modelo de IA
-        ai_model="gemini-2.0-flash-exp",
+        ai_model="gemini-2.5-pro",
         
         # Órdenes duales (Market + Limit)
         enable_dual_orders=True,

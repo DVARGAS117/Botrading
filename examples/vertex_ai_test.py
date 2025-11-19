@@ -28,7 +28,7 @@ def test_vertex_ai_basic():
             project_id="tu-proyecto-gcp-12345",  # Reemplaza con tu project ID
             location="us-central1",
             credentials_path="C:\\Users\\TuUsuario\\.gcp\\vertex-ai-credentials.json",  # Reemplaza con tu ruta
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-pro",
             temperature=0.7,
             max_tokens=1024
         )
@@ -76,7 +76,7 @@ def test_google_ai_studio_fallback():
         # Configuración para Google AI Studio
         config = GeminiConfig(
             use_vertex_ai=False,  # Usar Google AI Studio
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-pro",
             temperature=0.7,
             max_tokens=1024
         )

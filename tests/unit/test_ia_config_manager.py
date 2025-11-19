@@ -34,7 +34,7 @@ class TestIAConfigManagerInitialization:
                 "profiles": {
                     "gemini-pro": {
                         "provider": "gemini",
-                        "model": "gemini-1.5-pro",
+                        "model": "gemini-2.5-pro",
                         "temperature": 0.7
                     }
                 }
