@@ -236,11 +236,14 @@ class BaseBotOperations(ABC):
             
             # 7. AI Client (Vertex por defecto)
             try:
-                # Load API key from credentials
+                # Load API key from credentials or environment
                 gemini_creds = creds.get("gemini", {})
-                api_key = gemini_creds.get("api_key")
+                api_key = gemini_creds.get("api_key") or os.getenv("GOOGLE_API_KEY")
                 if not api_key:
-                    raise BotOperationError("Falta API key de Gemini en config/credentials.json")
+                    raise BotOperationError("Falta API key de Gemini en config/credentials.json o variable GOOGLE_API_KEY")
+                
+                # Establecer la variable de entorno para que VertexAIClient la encuentre
+                os.environ["GOOGLE_API_KEY"] = api_key
                 
                 model_to_use = self.config.ai_model
                 if model_to_use != "gemini-3-pro-preview" and os.getenv("ALLOW_CUSTOM_GEMINI_MODEL") != "1":

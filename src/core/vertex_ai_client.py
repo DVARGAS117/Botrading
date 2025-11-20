@@ -23,8 +23,8 @@ import logging
 class VertexAIConfig:
     model: str = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
     temperature: float = 0.0
-    # Quintuplicado respecto al valor anterior (1024 -> 5120)
-    max_tokens: int = 5120
+    # Triplicado desde config original (8192 -> 24576)
+    max_tokens: int = 24576
     top_p: float = 1.0
     # Ampliar timeout para razonamiento profundo (30 -> 120 segundos)
     timeout: int = 120

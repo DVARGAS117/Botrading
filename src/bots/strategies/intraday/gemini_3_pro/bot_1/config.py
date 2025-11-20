@@ -67,7 +67,7 @@ BOT_1_SETTINGS = {
         "temperature": 0.7,  # Balance entre creatividad y consistencia
         "top_p": 0.95,
         "top_k": 40,
-        "max_output_tokens": 8192,
+        "max_output_tokens": 24576,  # Triplicado (8192 x 3)
     },
     
     # Configuración de ejecución
