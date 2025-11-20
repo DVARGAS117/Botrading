@@ -370,6 +370,60 @@ class BaseBotOperations(ABC):
         
         return False
     
+    def _get_active_symbols_for_trading(self) -> List[str]:
+        """Obtiene lista de símbolos que pueden operarse en el horario actual.
+        
+        Combina:
+        1. Símbolos configurados en config.symbols
+        2. Símbolos permitidos en la sesión activa (trading_sessions.json)
+        3. Símbolos con posiciones abiertas (siempre se procesan para reevaluación)
+        
+        Returns:
+            Lista de símbolos a procesar
+        """
+        # Si no hay session_manager, usar todos los símbolos configurados
+        if self.session_manager is None:
+            self.logger.info("SessionManager no disponible, usando todos los símbolos configurados")
+            return self.config.symbols
+        
+        # Obtener símbolos activos según sesión
+        session_symbols = self.session_manager.get_active_symbols()
+        
+        # Obtener símbolos con posiciones abiertas (para reevaluación)
+        symbols_with_positions = []
+        allow_reevaluation = self.session_manager.global_rules.get('allow_reevaluation_outside_hours', True)
+        
+        if allow_reevaluation and self.mt5_connection:
+            try:
+                for symbol in self.config.symbols:
+                    positions = self.mt5_connection.get_positions(symbol=symbol)
+                    if len(positions) > 0:
+                        symbols_with_positions.append(symbol)
+            except Exception as e:
+                self.logger.warning(
+                    f"Error obteniendo posiciones abiertas: {e}",
+                    extra={'error': str(e)}
+                )
+        
+        # Combinar: símbolos de sesión + símbolos con posiciones
+        active_symbols = set(session_symbols)
+        active_symbols.update(symbols_with_positions)
+        
+        # Filtrar por símbolos configurados
+        configured_symbols = set(self.config.symbols)
+        final_symbols = sorted(list(active_symbols & configured_symbols))
+        
+        # Log de símbolos con posiciones si están fuera de sesión
+        if symbols_with_positions:
+            out_of_session = set(symbols_with_positions) - set(session_symbols)
+            if out_of_session:
+                self.logger.info(
+                    f"📌 Símbolos con posiciones abiertas (reevaluación): {', '.join(sorted(out_of_session))}",
+                    extra={'symbols': sorted(list(out_of_session))}
+                )
+        
+        return final_symbols
+    
     def _should_query_symbol(self, symbol: str) -> Tuple[bool, str]:
         """
         Determina si se debe consultar a la IA para un símbolo dado.
@@ -511,27 +565,27 @@ class BaseBotOperations(ABC):
             self.logger.warning("Trading detenido por límites diarios alcanzados")
             return
         
-        # 3. Iterar por símbolos
-        for symbol in self.config.symbols:
+        # 3. Obtener símbolos activos en la sesión actual
+        active_symbols = self._get_active_symbols_for_trading()
+        
+        if not active_symbols:
+            session_info = self.session_manager.get_current_session() if self.session_manager else {}
+            session_name = session_info.get('name', 'desconocida')
+            self.logger.info(
+                f"⏸️  No hay símbolos permitidos en la sesión actual ({session_name})",
+                extra={'session': session_name, 'time': datetime.now().strftime('%H:%M')}
+            )
+            return
+        
+        self.logger.info(
+            f"✅ Símbolos activos para operar: {', '.join(active_symbols)}",
+            extra={'symbols': active_symbols, 'count': len(active_symbols)}
+        )
+        
+        # 4. Iterar solo por símbolos activos
+        for symbol in active_symbols:
             try:
                 self.logger.info(f"📊 Procesando {symbol}...")
-                
-                # 3a. Verificar si el símbolo puede operarse en el horario actual
-                should_query_ai, session_info = self._should_query_symbol(symbol)
-                
-                if not should_query_ai:
-                    self.logger.info(
-                        f"⏰ {symbol} fuera de horario. {session_info}",
-                        extra={'symbol': symbol, 'reason': session_info}
-                    )
-                    continue
-                
-                # Log información de sesión activa
-                if "Sesión activa:" in session_info:
-                    self.logger.info(
-                        f"✅ {symbol} en horario permitido. {session_info}",
-                        extra={'symbol': symbol, 'session_info': session_info}
-                    )
                 
                 # Extraer datos y calcular indicadores
                 indicators, ohlcv_data_dict = self._calculate_all_indicators(symbol)

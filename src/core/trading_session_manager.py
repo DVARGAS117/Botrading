@@ -256,6 +256,46 @@ class TradingSessionManager:
                 'reason': f"Fuera de horario.{next_info}"
             }
     
+    def get_current_session(self, current_time: Optional[datetime] = None) -> Dict:
+        """Obtiene información de la sesión activa actual (sin filtrar por símbolo).
+        
+        Args:
+            current_time: Hora actual (si es None, usa datetime.now())
+        
+        Returns:
+            Diccionario con información de la sesión:
+            - name: Nombre de la sesión
+            - start: Hora de inicio
+            - end: Hora de fin
+            - symbols: Lista de símbolos permitidos
+            - strategies: Estrategias recomendadas
+            - risk_level: Nivel de riesgo
+            Si no hay sesión activa, retorna dict vacío
+        """
+        if current_time is None:
+            current_time = datetime.now()
+        
+        current_time_obj = current_time.time()
+        
+        for session_name, session_data in self.sessions.items():
+            start_str = session_data.get('start', '00:00')
+            end_str = session_data.get('end', '23:59')
+            
+            start_time = self._parse_time(start_str)
+            end_time = self._parse_time(end_str)
+            
+            if self._is_time_in_range(current_time_obj, start_time, end_time):
+                return {
+                    'name': session_name,
+                    'start': start_str,
+                    'end': end_str,
+                    'symbols': session_data.get('symbols', []),
+                    'strategies': session_data.get('strategies', []),
+                    'risk_level': session_data.get('risk_level', 'medio')
+                }
+        
+        return {}
+    
     def get_active_symbols(self, current_time: Optional[datetime] = None) -> List[str]:
         """Retorna lista de símbolos que pueden operarse en el horario actual.
         
