@@ -19,7 +19,7 @@ Autor: Sistema Botrading
 Fecha: 2025-11-19
 """
 from dataclasses import dataclass, asdict
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -152,16 +152,19 @@ class IntradayIndicatorCalculator:
         """
         Calcula el PAQUETE TÁCTICO (M15) con pre-cálculo correcto.
         
+        IMPORTANTE: Solo retorna velas CERRADAS. Si la vela actual está en formación,
+        se excluye para garantizar que todos los datos sean definitivos.
+        
         Para asegurar que todos los indicadores estén correctamente calculados,
         especialmente EMA 200 que requiere 200 velas de histórico, se obtienen
-        más velas del necesario y luego se retornan solo las últimas N.
+        más velas del necesario y luego se retornan solo las últimas N cerradas.
         
         Args:
             symbol: Símbolo a analizar (ej: "EURUSD")
-            candles_to_return: Número de velas a retornar (default: 200)
+            candles_to_return: Número de velas cerradas a retornar (default: 200)
         
         Returns:
-            Lista de IntradayCandle_M15 con indicadores calculados
+            Lista de IntradayCandle_M15 con indicadores calculados (solo velas cerradas)
         
         Raises:
             ValueError: Si no hay suficientes datos históricos
@@ -187,7 +190,28 @@ class IntradayIndicatorCalculator:
         
         df = ohlcv_data.data
         
-        # Calcular todos los indicadores sobre el dataset completo
+        # Determinar si la última vela está cerrada o en formación
+        # Una vela M15 se forma cada 15 minutos (0, 15, 30, 45)
+        now = datetime.now()
+        current_minute = now.minute
+        current_second = now.second
+        
+        # Calcular si estamos dentro de una vela en formación
+        # Si los segundos > 0 o el minuto no es múltiplo de 15, la vela actual está en formación
+        is_current_candle_open = (current_second > 0) or (current_minute % 15 != 0)
+        
+        # Si la vela actual está en formación, excluirla
+        if is_current_candle_open:
+            df = df.iloc[:-1]  # Excluir la última vela (en formación)
+        
+        # Verificar que tenemos suficientes velas cerradas
+        if len(df) < candles_to_return:
+            raise ValueError(
+                f"Datos insuficientes después de excluir vela en formación. "
+                f"Se requieren {candles_to_return} velas cerradas, se tienen {len(df)}"
+            )
+        
+        # Calcular todos los indicadores sobre el dataset completo (sin vela en formación)
         ema_20 = self.base_calculator._calculate_ema(df['close'], 20)
         ema_200 = self.base_calculator._calculate_ema(df['close'], 200)
         vwap = self.base_calculator._calculate_vwap(df)
@@ -197,7 +221,7 @@ class IntradayIndicatorCalculator:
         # Bandas de Bollinger
         bb = self._calculate_bollinger_bands(df['close'], period=20, std_dev=2.0)
         
-        # Tomar solo las últimas N velas (con indicadores ya calculados)
+        # Tomar solo las últimas N velas cerradas (con indicadores ya calculados)
         result = []
         start_idx = len(df) - candles_to_return
         
@@ -475,4 +499,36 @@ class IntradayIndicatorCalculator:
         return {
             'tactical_m15': [asdict(candle) for candle in tactical],
             'strategic_d1': [asdict(candle) for candle in strategic]
+        }
+    
+    def calculate_indicators_for_timeframe(
+        self, 
+        ohlcv_data: OHLCVData
+    ) -> Dict[str, Any]:
+        """
+        Calcula indicadores para un timeframe específico (método genérico).
+        
+        Este método es llamado por BaseBotOperations para calcular indicadores
+        de manera genérica. Para IntradayIndicatorCalculator, retorna una
+        estructura compatible con el formato esperado.
+        
+        Args:
+            ohlcv_data: Datos OHLCV del timeframe
+            
+        Returns:
+            Diccionario con indicadores calculados en formato compatible
+        """
+        # Para compatibilidad con BaseBotOperations, retornamos una estructura
+        # que indique que los indicadores se calculan de manera especializada
+        # en los métodos calculate_tactical_package y calculate_strategic_package
+        
+        return {
+            'timeframe': ohlcv_data.timeframe,
+            'symbol': ohlcv_data.symbol,
+            'indicators': {
+                'note': 'Indicadores calculados por métodos especializados de IntradayIndicatorCalculator',
+                'timeframe': str(ohlcv_data.timeframe),
+                'count': ohlcv_data.count,
+                'available_methods': ['calculate_tactical_package', 'calculate_strategic_package', 'get_full_intraday_packages']
+            }
         }
