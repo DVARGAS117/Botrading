@@ -64,15 +64,16 @@ class IntradayBot1Strategy(BaseBotOperations):
         ops_db_path = Path(__file__).parent.parent.parent.parent.parent.parent / "data" / "operations.db"
         self.operations_repo = OperationsRepository(ops_db_path)
         
-        # Inicializar cliente Vertex AI (Gemini 3 Pro)
-        vertex_config = VertexAIConfig(
-            model="gemini-3-pro-preview",
-            temperature=0.7,
-            max_tokens=8192,
-            top_p=0.95,
-            timeout=120,
-        )
-        self.vertex_client = VertexAIClient(config=vertex_config)
+        # Inicializar cliente Vertex AI (Gemini 3 Pro) - se hará en initialize()
+        # vertex_config = VertexAIConfig(
+        #     model="gemini-3-pro-preview",
+        #     temperature=0.7,
+        #     max_tokens=8192,
+        #     top_p=0.95,
+        #     timeout=120,
+        # )
+        # self.vertex_client = VertexAIClient(config=vertex_config)
+        self.vertex_client = None  # Se inicializará en initialize()
         
         # Position manager se inicializará lazily cuando se necesite
         # (porque mt5_connection solo está disponible después de initialize())
@@ -106,6 +107,16 @@ class IntradayBot1Strategy(BaseBotOperations):
         
         # Ahora que data_extractor está disponible, crear IntradayIndicatorCalculator
         self.indicator_calculator = IntradayIndicatorCalculator(self.data_extractor)
+        
+        # Inicializar cliente Vertex AI (Gemini 3 Pro) ahora que tenemos la API key
+        vertex_config = VertexAIConfig(
+            model="gemini-3-pro-preview",
+            temperature=0.7,
+            max_tokens=8192,
+            top_p=0.95,
+            timeout=120,
+        )
+        self.vertex_client = VertexAIClient(config=vertex_config)
         
         self.logger.info(
             "IntradayIndicatorCalculator inicializado",
