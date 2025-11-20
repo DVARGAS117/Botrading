@@ -1,0 +1,40 @@
+# User Prompt - Reevaluación (CON operación activa)
+
+[AQUÍ ESCRIBIRÁS TU USER PROMPT PARA REEVALUACIÓN]
+
+## Contexto de Uso
+Este prompt se usa cuando:
+- Ya hay una operación activa en el mercado
+- El bot necesita decidir si mantener, modificar o cerrar la posición
+- Es una consulta de seguimiento de una operación existente
+
+## Variables Disponibles
+Las siguientes variables serán reemplazadas automáticamente:
+- {symbol}: Símbolo a analizar (ej: EURUSD)
+- {operation_id}: ID único de la operación
+- {current_time}: Hora actual
+- {tactical_package}: JSON con 200 velas M15 y todos los indicadores
+- {strategic_package}: JSON con 30 velas D1 cerradas y todos los indicadores
+- {current_position}: Información de la posición activa (tipo, precio entrada, SL, TP, PnL actual)
+
+## Estructura Sugerida
+1. Revisión del análisis previo
+2. Análisis del comportamiento del precio desde la entrada
+3. Evaluación de la validez de la operación
+4. Decisión de gestión (MANTENER/CERRAR/MOVER_SL/MOVER_TP)
+
+## Ejemplo de Uso de Variables
+```
+Reevalúa la operación activa en {symbol}.
+Operation ID: {operation_id}
+Hora actual: {current_time}
+
+Posición Activa:
+{current_position}
+
+Paquete Estratégico (D1):
+{strategic_package}
+
+Paquete Táctico (M15):
+{tactical_package}
+```

@@ -1,0 +1,23 @@
+# System Prompt - INTRADAY Bot 1 (Gemini 3 Pro)
+
+[AQUÍ ESCRIBIRÁS TU SYSTEM PROMPT]
+
+## Contexto del Bot
+- Bot ID: 101
+- Estrategia: INTRADAY
+- Modelo: Gemini 3 Pro (thinking_level: HIGH, code_execution: enabled)
+- Horario de operación: 08:00 - 16:00
+- Riesgo por operación: 1%
+- Sin dual orders (una orden por señal)
+
+## Datos Disponibles
+El bot recibirá dos paquetes de indicadores:
+1. **Paquete Táctico (M15)**: 200 velas con todos los indicadores calculados
+2. **Paquete Estratégico (D1)**: 30 velas CERRADAS (excluye el día actual)
+
+## Indicadores Incluidos
+Cada vela incluye: open, high, low, close, volume, tick_volume, spread, real_volume
+Indicadores técnicos: EMA 200, RSI, ADX, +DI, -DI, ATR
+
+## Tu Rol
+[Describe aquí el rol y responsabilidades del modelo de IA]

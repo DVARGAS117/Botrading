@@ -1,0 +1,36 @@
+# User Prompt - Evaluación Inicial (SIN operación activa)
+
+[AQUÍ ESCRIBIRÁS TU USER PROMPT PARA EVALUACIÓN INICIAL]
+
+## Contexto de Uso
+Este prompt se usa cuando:
+- No hay operación activa en el mercado
+- El bot busca identificar una nueva oportunidad de entrada
+- Es la primera consulta para una posible operación
+
+## Variables Disponibles
+Las siguientes variables serán reemplazadas automáticamente:
+- {symbol}: Símbolo a analizar (ej: EURUSD)
+- {operation_id}: ID único de la operación
+- {current_time}: Hora actual
+- {tactical_package}: JSON con 200 velas M15 y todos los indicadores
+- {strategic_package}: JSON con 30 velas D1 cerradas y todos los indicadores
+
+## Estructura Sugerida
+1. Análisis del contexto estratégico (D1)
+2. Análisis del contexto táctico (M15)
+3. Identificación de oportunidades
+4. Decisión de entrada (COMPRAR/VENDER/NO_OPERAR)
+5. Niveles de SL y TP si hay señal
+
+## Ejemplo de Uso de Variables
+```
+Analiza {symbol} en el momento {current_time}.
+Operation ID: {operation_id}
+
+Paquete Estratégico (D1):
+{strategic_package}
+
+Paquete Táctico (M15):
+{tactical_package}
+```

@@ -21,9 +21,9 @@ def get_bot_1_config(mode: BotMode = BotMode.DEMO) -> BotConfig:
         BotConfig: Configuración del bot con parámetros optimizados para Gemini 3 Pro
     """
     return BotConfig(
-        bot_id=101,  # ID único para estrategia INTRADAY
+        bot_id=5,  # ID único para estrategia INTRADAY (bot_id debe estar entre 1-5)
         bot_name="INTRADAY Baseline",
-        bot_type="intraday",
+        bot_type="numerico",  # Tipo numerico (análisis basado en indicadores)
         mode=mode,
         symbols=["EURUSD"],
         timeframes=[
@@ -89,9 +89,109 @@ BOT_1_SETTINGS = {
         "log_indicators": True,       # Registrar valores de indicadores
     },
     
-    # Indicadores a utilizar (placeholder - se definirán posteriormente)
+    # Indicadores a utilizar
     "indicators": {
-        # TODO: Definir indicadores específicos de la estrategia INTRADAY
-        # Ejemplos: EMA, RSI, MACD, Bandas de Bollinger, etc.
+        # Paquete Táctico (M15): 200 velas
+        "tactical": {
+            "timeframe": "M15",
+            "candles": 200,
+            "indicators": [
+                {
+                    "name": "EMA",
+                    "period": 200,
+                    "description": "Media móvil exponencial de 200 periodos para tendencia",
+                },
+                {
+                    "name": "RSI",
+                    "period": 14,
+                    "overbought": 70,
+                    "oversold": 30,
+                    "description": "Índice de fuerza relativa para identificar sobrecompra/sobreventa",
+                },
+                {
+                    "name": "ADX",
+                    "period": 14,
+                    "threshold": 25,
+                    "description": "Índice de movimiento direccional promedio para fuerza de tendencia",
+                },
+                {
+                    "name": "DI+",
+                    "period": 14,
+                    "description": "Indicador direccional positivo",
+                },
+                {
+                    "name": "DI-",
+                    "period": 14,
+                    "description": "Indicador direccional negativo",
+                },
+                {
+                    "name": "ATR",
+                    "period": 14,
+                    "description": "Average True Range para volatilidad y dimensionamiento de stops",
+                },
+            ],
+            "ohlcv_fields": [
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "tick_volume",
+                "spread",
+                "real_volume",
+            ],
+        },
+        # Paquete Estratégico (D1): 30 velas CERRADAS (excluye día actual)
+        "strategic": {
+            "timeframe": "D1",
+            "candles": 30,
+            "exclude_current_day": True,
+            "description": "Solo velas completas/cerradas para análisis estratégico",
+            "indicators": [
+                {
+                    "name": "EMA",
+                    "period": 200,
+                    "description": "Media móvil exponencial de 200 periodos para tendencia diaria",
+                },
+                {
+                    "name": "RSI",
+                    "period": 14,
+                    "overbought": 70,
+                    "oversold": 30,
+                    "description": "RSI diario para contexto general",
+                },
+                {
+                    "name": "ADX",
+                    "period": 14,
+                    "threshold": 25,
+                    "description": "ADX diario para fuerza de tendencia global",
+                },
+                {
+                    "name": "DI+",
+                    "period": 14,
+                    "description": "DI+ diario",
+                },
+                {
+                    "name": "DI-",
+                    "period": 14,
+                    "description": "DI- diario",
+                },
+                {
+                    "name": "ATR",
+                    "period": 14,
+                    "description": "ATR diario para volatilidad global",
+                },
+            ],
+            "ohlcv_fields": [
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "tick_volume",
+                "spread",
+                "real_volume",
+            ],
+        },
     },
 }
