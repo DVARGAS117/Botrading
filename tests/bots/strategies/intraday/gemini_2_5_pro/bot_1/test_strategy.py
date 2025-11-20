@@ -35,7 +35,7 @@ class TestIntradayBot1Strategy:
         
         assert bot is not None
         assert isinstance(bot, IntradayBot1Strategy)
-        assert bot.config.bot_id == 6
+        assert bot.config.bot_id == 106
         assert bot.config.ai_model == "gemini-2.5-pro"
     
     def test_bot_has_required_attributes(self, bot_config):

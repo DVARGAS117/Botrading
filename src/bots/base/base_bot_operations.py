@@ -100,8 +100,8 @@ class BotConfig:
     
     def __post_init__(self):
         """Validar configuración"""
-        # Aceptar bot_id de 1-5 (legacy) o 101-105 (nuevos IDs de 3 dígitos)
-        valid_ids = [1, 2, 3, 4, 5, 101, 102, 103, 104, 105]
+        # Aceptar bot_id de 1-5 (legacy) o 101-106 (nuevos IDs de 3 dígitos)
+        valid_ids = [1, 2, 3, 4, 5, 101, 102, 103, 104, 105, 106]
         if self.bot_id not in valid_ids:
             raise ValueError(f"bot_id debe ser uno de {valid_ids}, recibido: {self.bot_id}")
         

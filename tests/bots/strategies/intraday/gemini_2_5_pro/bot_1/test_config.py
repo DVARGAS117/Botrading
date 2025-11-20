@@ -20,7 +20,7 @@ class TestBot1Config:
         config = get_bot_1_config()
         
         assert isinstance(config, BotConfig)
-        assert config.bot_id == 6
+        assert config.bot_id == 106
         assert config.bot_name == "INTRADAY Gemini 2.5 Pro"
         assert config.bot_type == "numerico"
         assert config.mode == BotMode.DEMO
@@ -34,7 +34,7 @@ class TestBot1Config:
         config = get_bot_1_config(mode=BotMode.LIVE)
         
         assert config.mode == BotMode.LIVE
-        assert config.bot_id == 6
+        assert config.bot_id == 106
         assert config.ai_model == "gemini-2.5-pro"
     
     def test_bot_1_config_symbols(self):
