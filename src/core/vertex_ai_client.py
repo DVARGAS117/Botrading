@@ -39,13 +39,18 @@ class VertexAIConfig:
         - Se pasa explícitamente un modelo distinto al instanciar VertexAIConfig (param model) Y
         - La variable de entorno ALLOW_CUSTOM_GEMINI_MODEL == "1"
 
-        De lo contrario, se fuerza gemini-2.5-pro.
+        De lo contrario, se fuerza gemini-3-pro-preview.
+        
+        Modelos permitidos por defecto:
+        - gemini-3-pro-preview
+        - gemini-2.5-pro
         """
-        default_model = "gemini-3-pro-preview"
+        allowed_models = ["gemini-3-pro-preview", "gemini-2.5-pro"]
         allow_custom = os.getenv("ALLOW_CUSTOM_GEMINI_MODEL") == "1"
-        if self.model != default_model and not allow_custom:
+        
+        if self.model not in allowed_models and not allow_custom:
             raise ValueError(
-                f"Modelo '{self.model}' no permitido. Usa '{default_model}' o establece ALLOW_CUSTOM_GEMINI_MODEL=1 para override manual."
+                f"Modelo '{self.model}' no permitido. Usa uno de {allowed_models} o establece ALLOW_CUSTOM_GEMINI_MODEL=1 para override manual."
             )
         # Si ya se proporcionó project_id y el endpoint no incluye la ruta de proyecto, complétalo
         if self.project_id and "/projects/" not in self.endpoint:
