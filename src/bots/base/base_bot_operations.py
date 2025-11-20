@@ -250,7 +250,9 @@ class BaseBotOperations(ABC):
                 os.environ["GOOGLE_API_KEY"] = api_key
                 
                 model_to_use = self.config.ai_model
-                if model_to_use != "gemini-3-pro-preview" and os.getenv("ALLOW_CUSTOM_GEMINI_MODEL") != "1":
+                # Permitir modelos: gemini-3-pro-preview y gemini-2.5-pro
+                allowed_models = ["gemini-3-pro-preview", "gemini-2.5-pro"]
+                if model_to_use not in allowed_models and os.getenv("ALLOW_CUSTOM_GEMINI_MODEL") != "1":
                     self.logger.warning(
                         f"Modelo '{model_to_use}' reemplazado por 'gemini-3-pro-preview' (enforcement)"
                     )
