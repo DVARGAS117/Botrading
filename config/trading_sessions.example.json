@@ -36,7 +36,7 @@
         },
         "ny_tarde": {
             "start": "11:00",
-            "end": "13:00",
+            "end": "12:59",
             "symbols": [
                 "EURUSD",
                 "USDCAD"
@@ -49,7 +49,7 @@
         },
         "dead_zone": {
             "start": "13:00",
-            "end": "18:00",
+            "end": "18:59",
             "symbols": [],
             "strategies": [],
             "risk_level": "ninguno",

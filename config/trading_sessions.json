@@ -1,19 +1,5 @@
 {
     "sessions": {
-        "test_session": {
-            "start": "00:00",
-            "end": "23:59",
-            "symbols": [
-                "EURUSD",
-                "GBPUSD"
-            ],
-            "strategies": [
-                "A_tendencia",
-                "B_rango",
-                "C_breakout"
-            ],
-            "risk_level": "medio"
-        },
         "londres": {
             "start": "02:00",
             "end": "05:00",
@@ -47,7 +33,7 @@
         },
         "ny_tarde": {
             "start": "11:00",
-            "end": "13:00",
+            "end": "12:59",
             "symbols": [
                 "EURUSD",
                 "USDCAD"
@@ -59,7 +45,7 @@
         },
         "dead_zone": {
             "start": "13:00",
-            "end": "18:00",
+            "end": "18:59",
             "symbols": [],
             "strategies": [],
             "risk_level": "ninguno"
