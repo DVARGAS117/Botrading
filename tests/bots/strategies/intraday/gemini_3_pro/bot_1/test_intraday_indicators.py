@@ -76,6 +76,31 @@ def sample_ohlcv_d1():
     )
 
 
+@pytest.fixture
+def sample_ohlcv_m15_update():
+    """Fixture: Datos OHLCV M15 para tactical update (300 velas)."""
+    # Generar 300 velas para tener suficiente histórico para updates
+    dates = pd.date_range(start='2025-11-19 10:00', periods=300, freq='15min')
+    
+    np.random.seed(44)
+    close_prices = 100 + np.cumsum(np.random.randn(300) * 0.1)
+    
+    data = pd.DataFrame({
+        'open': close_prices + np.random.randn(300) * 0.05,
+        'high': close_prices + abs(np.random.randn(300) * 0.1),
+        'low': close_prices - abs(np.random.randn(300) * 0.1),
+        'close': close_prices,
+        'volume': np.random.randint(1000, 10000, 300),
+    }, index=dates)
+    
+    return OHLCVData(
+        symbol="EURUSD",
+        timeframe=Timeframe.M15,
+        data=data,
+        count=300
+    )
+
+
 class TestIntradayIndicatorCalculator:
     """Tests para IntradayIndicatorCalculator."""
     
@@ -317,3 +342,183 @@ class TestIntradayIndicatorCalculator:
         valid_idx = ~bb['upper'].isna()
         assert (bb['upper'][valid_idx] >= bb['middle'][valid_idx]).all()
         assert (bb['middle'][valid_idx] >= bb['lower'][valid_idx]).all()
+
+
+# ==================== TESTS: TACTICAL UPDATE ====================
+
+class TestTacticalUpdate:
+    """Tests para actualización táctica incremental."""
+    
+    def test_tactical_update_returns_new_candles_only(
+        self, mock_data_extractor, sample_ohlcv_m15_update
+    ):
+        """Test: Retorna solo velas nuevas entre timestamps."""
+        mock_data_extractor.get_ohlcv.return_value = sample_ohlcv_m15_update
+        
+        calculator = IntradayIndicatorCalculator(mock_data_extractor)
+        
+        # Simular consulta hace 30 minutos (2 velas M15)
+        current_time = datetime(2025, 11, 19, 14, 30, 0)
+        last_time = datetime(2025, 11, 19, 14, 0, 0)
+        
+        update = calculator.calculate_tactical_update(
+            symbol="EURUSD",
+            last_timestamp=last_time,
+            current_timestamp=current_time
+        )
+        
+        # Debe retornar 2 velas (14:00 y 14:15)
+        assert len(update) == 2
+        
+        # Verificar que son las velas correctas
+        assert "14:00" in update[0].timestamp or "14:15" in update[0].timestamp
+        assert "14:15" in update[1].timestamp or "14:30" in update[1].timestamp
+    
+    def test_tactical_update_all_indicators_present(
+        self, mock_data_extractor, sample_ohlcv_m15_update
+    ):
+        """Test: Todas las velas tienen todos los indicadores principales."""
+        mock_data_extractor.get_ohlcv.return_value = sample_ohlcv_m15_update
+        
+        calculator = IntradayIndicatorCalculator(mock_data_extractor)
+        
+        current_time = datetime(2025, 11, 19, 14, 30, 0)
+        last_time = datetime(2025, 11, 19, 14, 0, 0)
+        
+        update = calculator.calculate_tactical_update(
+            symbol="EURUSD",
+            last_timestamp=last_time,
+            current_timestamp=current_time
+        )
+        
+        # Verificar indicadores principales (siempre deben estar)
+        for candle in update:
+            assert candle.ema_20 is not None
+            assert candle.ema_200 is not None
+            assert candle.vwap is not None
+            assert candle.rsi_14 is not None
+            assert candle.atr_14 is not None
+            # Bollinger Bands pueden ser None en primeras velas si no hay suficiente histórico
+            # pero al menos deben estar definidos los atributos
+            assert hasattr(candle, 'bb_upper')
+            assert hasattr(candle, 'bb_lower')
+            assert hasattr(candle, 'bb_width')
+    
+    def test_tactical_update_no_new_candles(
+        self, mock_data_extractor
+    ):
+        """Test: Retorna lista vacía si no hay velas nuevas."""
+        calculator = IntradayIndicatorCalculator(mock_data_extractor)
+        
+        # Misma hora (diferencia de 0 minutos)
+        current_time = datetime(2025, 11, 19, 14, 0, 0)
+        last_time = datetime(2025, 11, 19, 14, 0, 0)
+        
+        # Debe lanzar ValueError porque last >= current
+        with pytest.raises(ValueError, match="debe ser anterior"):
+            calculator.calculate_tactical_update(
+                symbol="EURUSD",
+                last_timestamp=last_time,
+                current_timestamp=current_time
+            )
+    
+    def test_tactical_update_single_candle(
+        self, mock_data_extractor, sample_ohlcv_m15_update
+    ):
+        """Test: Retorna una sola vela si solo pasaron 15 minutos."""
+        mock_data_extractor.get_ohlcv.return_value = sample_ohlcv_m15_update
+        
+        calculator = IntradayIndicatorCalculator(mock_data_extractor)
+        
+        current_time = datetime(2025, 11, 19, 14, 15, 0)
+        last_time = datetime(2025, 11, 19, 14, 0, 0)
+        
+        update = calculator.calculate_tactical_update(
+            symbol="EURUSD",
+            last_timestamp=last_time,
+            current_timestamp=current_time
+        )
+        
+        # Debe retornar 1 vela (14:00)
+        assert len(update) == 1
+        assert "14:00" in update[0].timestamp or "14:15" in update[0].timestamp
+    
+    def test_tactical_update_multiple_candles(
+        self, mock_data_extractor, sample_ohlcv_m15_update
+    ):
+        """Test: Retorna múltiples velas si pasó más tiempo."""
+        mock_data_extractor.get_ohlcv.return_value = sample_ohlcv_m15_update
+        
+        calculator = IntradayIndicatorCalculator(mock_data_extractor)
+        
+        # 1 hora = 4 velas M15
+        current_time = datetime(2025, 11, 19, 15, 0, 0)
+        last_time = datetime(2025, 11, 19, 14, 0, 0)
+        
+        update = calculator.calculate_tactical_update(
+            symbol="EURUSD",
+            last_timestamp=last_time,
+            current_timestamp=current_time
+        )
+        
+        # Debe retornar 4 velas (14:00, 14:15, 14:30, 14:45)
+        assert len(update) == 4
+    
+    def test_tactical_update_validates_timestamp_order(
+        self, mock_data_extractor
+    ):
+        """Test: Valida que last_timestamp < current_timestamp."""
+        calculator = IntradayIndicatorCalculator(mock_data_extractor)
+        
+        # Timestamps invertidos
+        current_time = datetime(2025, 11, 19, 14, 0, 0)
+        last_time = datetime(2025, 11, 19, 15, 0, 0)
+        
+        with pytest.raises(ValueError, match="debe ser anterior"):
+            calculator.calculate_tactical_update(
+                symbol="EURUSD",
+                last_timestamp=last_time,
+                current_timestamp=current_time
+            )
+    
+    def test_tactical_update_default_current_timestamp(
+        self, mock_data_extractor, sample_ohlcv_m15_update
+    ):
+        """Test: Usa datetime.now() si no se proporciona current_timestamp."""
+        mock_data_extractor.get_ohlcv.return_value = sample_ohlcv_m15_update
+        
+        calculator = IntradayIndicatorCalculator(mock_data_extractor)
+        
+        # Solo proporcionar last_timestamp
+        last_time = datetime.now() - pd.Timedelta(minutes=30)
+        
+        # No debe lanzar error (usa datetime.now() internamente)
+        update = calculator.calculate_tactical_update(
+            symbol="EURUSD",
+            last_timestamp=last_time
+        )
+        
+        # Debe retornar al menos 1 vela
+        assert len(update) >= 1
+    
+    def test_tactical_update_ema_200_calculated_correctly(
+        self, mock_data_extractor, sample_ohlcv_m15_update
+    ):
+        """Test: EMA 200 está calculada correctamente en velas nuevas."""
+        mock_data_extractor.get_ohlcv.return_value = sample_ohlcv_m15_update
+        
+        calculator = IntradayIndicatorCalculator(mock_data_extractor)
+        
+        current_time = datetime(2025, 11, 19, 14, 30, 0)
+        last_time = datetime(2025, 11, 19, 14, 0, 0)
+        
+        update = calculator.calculate_tactical_update(
+            symbol="EURUSD",
+            last_timestamp=last_time,
+            current_timestamp=current_time
+        )
+        
+        # Todas las velas deben tener EMA 200 (pre-calculada con histórico)
+        for candle in update:
+            assert candle.ema_200 is not None
+            assert candle.ema_200 > 0

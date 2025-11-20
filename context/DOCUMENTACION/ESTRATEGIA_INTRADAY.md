@@ -327,6 +327,7 @@ pytest tests/bots/strategies/intraday/gemini_3_pro/bot_1/ --cov=src.bots.strateg
 ## Documentos Relacionados
 
 - [Parámetros Gemini 3 Pro](./PARAMETROS_GEMINI_3_PRO.md)
+- [Sistema de Consultas y Almacenamiento](./INTRADAY_SISTEMA_CONSULTAS.md)
 - [Mapa de Ubicación de Bots](./MAPA_UBICACION_BOTS.md)
 - [Agents Rules](../agents.md)
 

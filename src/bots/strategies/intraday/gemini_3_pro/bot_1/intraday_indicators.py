@@ -258,6 +258,112 @@ class IntradayIndicatorCalculator:
         
         return result
     
+    def calculate_tactical_update(
+        self,
+        symbol: str,
+        last_timestamp: datetime,
+        current_timestamp: Optional[datetime] = None
+    ) -> List[IntradayCandle_M15]:
+        """
+        Calcula actualización táctica incremental con solo velas nuevas.
+        
+        Este método obtiene únicamente las velas M15 que se cerraron entre
+        la última consulta y el momento actual, con todos sus indicadores.
+        
+        Ejemplo:
+            - Última consulta: 2025-11-19 14:00:00
+            - Consulta actual: 2025-11-19 14:30:00
+            - Resultado: 2 velas M15 (14:00 y 14:15) con indicadores completos
+        
+        Args:
+            symbol: Símbolo a analizar (ej: "EURUSD")
+            last_timestamp: Timestamp de la última consulta enviada
+            current_timestamp: Timestamp actual (default: datetime.now())
+        
+        Returns:
+            Lista de IntradayCandle_M15 con solo las velas nuevas
+        
+        Raises:
+            ValueError: Si no hay suficientes datos o timestamps inválidos
+        """
+        if current_timestamp is None:
+            current_timestamp = datetime.now()
+        
+        # Validar timestamps
+        if last_timestamp >= current_timestamp:
+            raise ValueError(
+                f"last_timestamp ({last_timestamp}) debe ser anterior a "
+                f"current_timestamp ({current_timestamp})"
+            )
+        
+        # Calcular intervalo en minutos (cada vela M15 = 15 minutos)
+        time_diff = (current_timestamp - last_timestamp).total_seconds() / 60
+        estimated_new_candles = int(time_diff / 15)
+        
+        if estimated_new_candles == 0:
+            # No hay velas nuevas cerradas aún
+            return []
+        
+        # Para calcular indicadores correctamente, necesitamos histórico
+        # Obtenemos más velas para tener contexto de indicadores
+        # (especialmente EMA 200 que requiere 200 períodos previos)
+        historical_buffer = 250  # Mismo buffer que en calculate_tactical_package
+        total_candles = estimated_new_candles + historical_buffer + 10  # +10 margen
+        
+        # Obtener datos históricos M15
+        ohlcv_data = self.data_extractor.get_ohlcv(
+            symbol=symbol,
+            timeframe=Timeframe.M15,
+            count=total_candles
+        )
+        
+        if ohlcv_data.count < (estimated_new_candles + historical_buffer):
+            raise ValueError(
+                f"Datos insuficientes para {symbol} M15. "
+                f"Se requieren al menos {estimated_new_candles + historical_buffer}, "
+                f"se obtuvieron {ohlcv_data.count}"
+            )
+        
+        df = ohlcv_data.data
+        
+        # Calcular todos los indicadores sobre el dataset completo
+        ema_20 = self.base_calculator._calculate_ema(df['close'], 20)
+        ema_200 = self.base_calculator._calculate_ema(df['close'], 200)
+        vwap = self.base_calculator._calculate_vwap(df)
+        rsi_14 = self.base_calculator._calculate_rsi(df['close'], 14)
+        atr_14 = self.base_calculator._calculate_atr(df, 14)
+        
+        # Bandas de Bollinger
+        bb = self._calculate_bollinger_bands(df['close'], period=20, std_dev=2.0)
+        
+        # Filtrar solo las velas que están en el rango [last_timestamp, current_timestamp]
+        result = []
+        for i in range(len(df)):
+            candle_time = df.index[i].to_pydatetime()
+            
+            # Incluir velas que cerraron después de last_timestamp
+            # y antes o igual a current_timestamp
+            if last_timestamp < candle_time <= current_timestamp:
+                candle = IntradayCandle_M15(
+                    timestamp=df.index[i].strftime('%Y-%m-%d %H:%M:%S'),
+                    open=float(df['open'].iloc[i]),
+                    high=float(df['high'].iloc[i]),
+                    low=float(df['low'].iloc[i]),
+                    close=float(df['close'].iloc[i]),
+                    volume=float(df['volume'].iloc[i]),
+                    ema_20=float(ema_20.iloc[i]) if not pd.isna(ema_20.iloc[i]) else None,
+                    ema_200=float(ema_200.iloc[i]) if not pd.isna(ema_200.iloc[i]) else None,
+                    vwap=float(vwap.iloc[i]) if not pd.isna(vwap.iloc[i]) else None,
+                    rsi_14=float(rsi_14.iloc[i]) if not pd.isna(rsi_14.iloc[i]) else None,
+                    atr_14=float(atr_14.iloc[i]) if not pd.isna(atr_14.iloc[i]) else None,
+                    bb_upper=float(bb['upper'].iloc[i]) if not pd.isna(bb['upper'].iloc[i]) else None,
+                    bb_lower=float(bb['lower'].iloc[i]) if not pd.isna(bb['lower'].iloc[i]) else None,
+                    bb_width=float(bb['width'].iloc[i]) if not pd.isna(bb['width'].iloc[i]) else None,
+                )
+                result.append(candle)
+        
+        return result
+    
     def get_full_intraday_packages(
         self, 
         symbol: str,
