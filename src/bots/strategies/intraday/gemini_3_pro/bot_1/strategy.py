@@ -19,7 +19,13 @@ from src.bots.strategies.intraday.gemini_3_pro.bot_1.intraday_indicators import 
 )
 from src.core.ia_query_repository import IAQueryRepository, QueryType
 from src.core.mt5_data_extractor import MT5DataExtractor
-from src.core.operations_repository import OperationsRepository
+from src.core.operations_repository import (
+    Direction,
+    OperationsRepository,
+    OperationStatus,
+    OrderType as DBOrderType,
+)
+from src.core.order_manager import OrderRequest, OrderType
 from src.core.position_manager import PositionManager
 from src.core.vertex_ai_client import VertexAIClient, VertexAIConfig
 from src.core.vwap_prompt_builder import MarketContext
@@ -72,8 +78,9 @@ class IntradayBot1Strategy(BaseBotOperations):
         # (porque mt5_connection solo está disponible después de initialize())
         self._position_manager = None
         
-        # Ruta a los prompts
-        self.prompts_dir = Path(__file__).parent / "prompts"
+        # Ruta a los prompts (usar config/prompt_templates/)
+        # Subir 6 niveles desde strategy.py hasta raíz del proyecto
+        self.prompts_dir = Path(__file__).parent.parent.parent.parent.parent.parent.parent / "config" / "prompt_templates"
 
         self.logger.info(
             "Bot 1 (INTRADAY Baseline) inicializado",
@@ -191,15 +198,12 @@ class IntradayBot1Strategy(BaseBotOperations):
             raise
         
         # 3. Cargar prompts desde archivos
-        system_prompt_path = self.prompts_dir / "system_prompt.txt"
+        # Usar los archivos reales de config/prompt_templates/
+        system_prompt_path = self.prompts_dir / "intraday_gemini_3_pro_bot_1_system.txt"
+        user_prompt_path = self.prompts_dir / "intraday_gemini_3_pro_bot_1_user.txt"
         
-        # Determinar si hay operación activa para elegir prompt correcto
+        # Determinar si hay operación activa (siempre usamos el mismo user prompt)
         has_active_position = self._has_active_position(symbol)
-        
-        if has_active_position:
-            user_prompt_path = self.prompts_dir / "user_prompt_reevaluation.txt"
-        else:
-            user_prompt_path = self.prompts_dir / "user_prompt_evaluation.txt"
         
         try:
             with open(system_prompt_path, "r", encoding="utf-8") as f:
@@ -807,3 +811,120 @@ class IntradayBot1Strategy(BaseBotOperations):
                 extra={"symbol": symbol, "error": str(e)},
             )
             raise
+    
+    def _execute_open_position(self, symbol: str, decision: Dict[str, Any]) -> None:
+        """Sobrescribe método base para registrar operación en BD con valores iniciales de SL/TP.
+        
+        Este método:
+        1. Llama a la implementación base para abrir la posición en MT5
+        2. Registra la operación en la base de datos con stop_loss_initial y take_profit_initial
+        
+        Args:
+            symbol: Símbolo del activo (ej: EURUSD)
+            decision: Diccionario con la decisión de la IA incluyendo SL, TP, dirección, etc.
+        """
+        self.logger.info(
+            f"🟢 Abriendo posición INTRADAY en {symbol}",
+            extra={"symbol": symbol, "decision": decision}
+        )
+        
+        try:
+            # 1. Extraer parámetros de la decisión
+            direction = decision.get("direccion", "").lower()
+            stop_loss = decision.get("stop_loss")
+            take_profit = decision.get("take_profit") or decision.get("take_profit_1")
+            entry_price = decision.get("precio_entrada")
+            
+            if not stop_loss or not take_profit:
+                self.logger.warning("Decisión sin SL/TP válidos; no se abrirá operación")
+                return
+            
+            # Precio actual si no hay entrada explícita
+            tick = self.mt5_connection._mt5.symbol_info_tick(symbol)
+            if entry_price is None and tick is not None:
+                entry_price = tick.ask if direction == "buy" else tick.bid
+            
+            # 2. Ejecutar orden a través del método base (enviará a MT5)
+            super()._execute_open_position(symbol, decision)
+            
+            # 3. Registrar en base de datos con valores iniciales
+            # Verificar si la orden se ejecutó (buscar posición recién abierta)
+            if not self._position_manager:
+                self.logger.warning("PositionManager no disponible, no se registrará en BD")
+                return
+            
+            # Buscar posición por símbolo (get_positions_by_symbol retorna lista)
+            positions = self._position_manager.get_positions_by_symbol(symbol)
+            
+            if not positions:
+                self.logger.warning(
+                    f"No se encontró posición recién abierta para {symbol}, "
+                    "no se registrará en BD"
+                )
+                return
+            
+            # Tomar la primera posición (asumimos que es la recién abierta)
+            position = positions[0]
+            
+            # 4. Crear registro en operations_repository
+            db_direction = Direction.BUY if direction == "buy" else Direction.SELL
+            
+            # Calcular lot size y risk (simplificado - usar valores de posición MT5)
+            lot_size = float(position.volume)
+            risk_pct = float(self.config.risk_per_trade)
+            
+            # Generar operation_id único
+            operation_id = generate_operation_id(
+                bot_id=self.config.bot_id,
+                symbol=symbol
+            )
+            
+            self.logger.info(
+                f"Registrando operación en BD: {operation_id}",
+                extra={
+                    "symbol": symbol,
+                    "direction": db_direction.value,
+                    "entry_price": position.price_open,
+                    "stop_loss": stop_loss,
+                    "take_profit": take_profit,
+                    "stop_loss_initial": stop_loss,  # Guardar SL inicial
+                    "take_profit_initial": take_profit,  # Guardar TP inicial
+                }
+            )
+            
+            # Crear operación en BD
+            operation = self.operations_repo.create_operation(
+                magic_number=position.ticket,
+                bot_id=self.config.bot_id,
+                ia_id=1,  # Usar 1 como default (ia_config_id no está en BotConfig)
+                order_type=DBOrderType.MARKET,
+                symbol=symbol,
+                direction=db_direction,
+                suggested_price=float(entry_price or position.price_open),
+                actual_entry_price=float(position.price_open),
+                stop_loss=float(stop_loss),
+                take_profit=float(take_profit),
+                stop_loss_initial=float(stop_loss),  # 🔑 Valor inicial de SL
+                take_profit_initial=float(take_profit),  # 🔑 Valor inicial de TP
+                lot_size=lot_size,
+                risk_percentage=risk_pct,
+                status=OperationStatus.OPEN,
+                conversation_id=operation_id,
+            )
+            
+            self.logger.info(
+                f"✅ Operación registrada en BD: ID={operation.id}, Magic={operation.magic_number}",
+                extra={
+                    "operation_id": operation_id,
+                    "db_id": operation.id,
+                    "magic_number": operation.magic_number,
+                    "stop_loss_initial": operation.stop_loss_initial,
+                    "take_profit_initial": operation.take_profit_initial,
+                }
+            )
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error al abrir/registrar posición en {symbol}: {e}",
+                extra={"symbol": symbol, "error": str(e)}
+            )

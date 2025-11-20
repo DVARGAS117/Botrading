@@ -727,27 +727,30 @@ class OperationsRepository:
         Returns:
             Operation construida desde la fila
         """
+        # Convertir Row a dict para facilitar acceso con get()
+        row_dict = dict(row)
+        
         return Operation(
-            id=row['id'],
-            magic_number=row['magic_number'],
-            bot_id=row['bot_id'],
-            ia_id=row['ia_id'],
-            order_type=OrderType(row['order_type']),
-            symbol=row['symbol'],
-            direction=Direction(row['direction']),
-            suggested_price=row['suggested_price'],
-            actual_entry_price=row['actual_entry_price'],
-            stop_loss=row['stop_loss'],
-            take_profit=row['take_profit'],
-            stop_loss_initial=row.get('stop_loss_initial'),
-            take_profit_initial=row.get('take_profit_initial'),
-            lot_size=row['lot_size'],
-            risk_percentage=row['risk_percentage'],
-            status=OperationStatus(row['status']),
-            profit_loss=row['profit_loss'],
-            open_time=datetime.fromisoformat(row['open_time']) if row['open_time'] else None,
-            close_time=datetime.fromisoformat(row['close_time']) if row['close_time'] else None,
-            conversation_id=row['conversation_id'],
+            id=row_dict['id'],
+            magic_number=row_dict['magic_number'],
+            bot_id=row_dict['bot_id'],
+            ia_id=row_dict['ia_id'],
+            order_type=OrderType(row_dict['order_type']),
+            symbol=row_dict['symbol'],
+            direction=Direction(row_dict['direction']),
+            suggested_price=row_dict['suggested_price'],
+            actual_entry_price=row_dict['actual_entry_price'],
+            stop_loss=row_dict['stop_loss'],
+            take_profit=row_dict['take_profit'],
+            stop_loss_initial=row_dict.get('stop_loss_initial'),  # Backwards compatible
+            take_profit_initial=row_dict.get('take_profit_initial'),  # Backwards compatible
+            lot_size=row_dict['lot_size'],
+            risk_percentage=row_dict['risk_percentage'],
+            status=OperationStatus(row_dict['status']),
+            profit_loss=row_dict['profit_loss'],
+            open_time=datetime.fromisoformat(row_dict['open_time']) if row_dict['open_time'] else None,
+            close_time=datetime.fromisoformat(row_dict['close_time']) if row_dict['close_time'] else None,
+            conversation_id=row_dict['conversation_id'],
             created_at=datetime.fromisoformat(row['created_at']) if row['created_at'] else None,
             updated_at=datetime.fromisoformat(row['updated_at']) if row['updated_at'] else None
         )
