@@ -193,6 +193,13 @@ class BaseBotOperations(ABC):
         Raises:
             BotOperationError: Si hay error crítico en inicialización
         """
+        # Cargar credenciales al inicio para usarlas en toda la inicialización
+        creds_path = Path("config/credentials.json")
+        if not creds_path.exists():
+            raise BotOperationError("No se encontró config/credentials.json")
+        loader = ConfigLoader()
+        creds = loader.load_json_config(str(creds_path))
+        
         try:
             self.logger.info("Iniciando inicialización de componentes...")
             # Log de diagnóstico de intérprete y versión
@@ -207,11 +214,6 @@ class BaseBotOperations(ABC):
             
             # 1. Conexión real a MT5 (sin mocks)
             try:
-                creds_path = Path("config/credentials.json")
-                if not creds_path.exists():
-                    raise BotOperationError("No se encontró config/credentials.json para MT5")
-                loader = ConfigLoader()
-                creds = loader.load_json_config(str(creds_path))
                 # Soporte para estructuras {mt5: {...}} o planas
                 mt5_creds = creds.get("mt5", creds)
                 self.mt5_connection = create_connector_from_credentials(mt5_creds, logger=self.logger)
