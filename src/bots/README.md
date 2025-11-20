@@ -2,48 +2,65 @@
 
 ## 📁 Estructura de Carpetas
 
-Cada bot tiene su propia carpeta con los siguientes archivos:
+Los bots ahora se organizan por **estrategia** y **agente IA**.
+
+Para la estrategia VWAP con Gemini 3 Pro:
 
 ```
-bot_X/
-├── __init__.py          # Inicialización del módulo
-├── main.py              # Punto de entrada principal del bot
-├── config.py            # Configuración específica del bot
-└── strategy.py          # Lógica de estrategia y decisiones
+src/bots/
+├── strategies/
+│   └── vwap/
+│       └── gemini_3_pro/
+│           ├── __init__.py
+│           ├── bot_1.py           # Numérico baseline VWAP
+│           ├── bot_2.py           # Numérico con prompts alternativos
+│           ├── bot_3.py           # Visual con indicadores en gráficos
+│           ├── bot_4.py           # Híbrido (visual + numérico)
+│           └── bot_5.py           # Visual + numérico separados
+└── bot_X/                         # Ubicación original (compatibilidad)
+  ├── __init__.py
+  ├── main.py
+  ├── config.py
+  └── strategy.py
 ```
 
 ## 🎯 Los 5 Bots
 
 ### **Bot 1: Numérico Baseline**
-- **Carpeta:** `bot_1/`
+- **Carpeta nueva:** `strategies/vwap/gemini_3_pro/bot_1.py`
+- **Carpeta original:** `bot_1/`
 - **Tipo:** Análisis numérico puro
 - **Datos:** Indicadores técnicos (EMA, RSI, MACD, Volumen)
 - **Estrategia:** Dual Market + Limit
 - **Objetivo:** Establecer baseline de rendimiento numérico
 
 ### **Bot 2: Numérico Alternativo**
-- **Carpeta:** `bot_2/`
+- **Carpeta nueva:** `strategies/vwap/gemini_3_pro/bot_2.py`
+- **Carpeta original:** `bot_2/`
 - **Tipo:** Análisis numérico con prompts diferentes
 - **Datos:** Mismos indicadores que Bot 1
 - **Estrategia:** Dual Market + Limit
 - **Objetivo:** Comparar impacto de diferentes enfoques en prompts
 
 ### **Bot 3: Visual Completo**
-- **Carpeta:** `bot_3/`
+- **Carpeta nueva:** `strategies/vwap/gemini_3_pro/bot_3.py`
+- **Carpeta original:** `bot_3/`
 - **Tipo:** Análisis visual de gráficos
 - **Datos:** Imágenes de velas + indicadores dibujados
 - **Estrategia:** Dual Market + Limit
 - **Objetivo:** Evaluar capacidad de análisis visual de IA
 
 ### **Bot 4: Híbrido Estratégico**
-- **Carpeta:** `bot_4/`
+- **Carpeta nueva:** `strategies/vwap/gemini_3_pro/bot_4.py`
+- **Carpeta original:** `bot_4/`
 - **Tipo:** Híbrido (visual + numérico)
 - **Datos:** Imagen para apertura, numérico para reevaluación
 - **Estrategia:** Dual Market + Limit
 - **Objetivo:** Combinar ventajas de ambos enfoques
 
 ### **Bot 5: Visual + Numérico Separado**
-- **Carpeta:** `bot_5/`
+- **Carpeta nueva:** `strategies/vwap/gemini_3_pro/bot_5.py`
+- **Carpeta original:** `bot_5/`
 - **Tipo:** Visual con datos numéricos separados
 - **Datos:** Imágenes de velas limpias + JSON de indicadores
 - **Estrategia:** Dual Market + Limit
@@ -54,20 +71,24 @@ bot_X/
 ### Ejecución Individual
 
 ```bash
-# Bot 1
+# Bot 1 (Numérico Baseline VWAP, compatibilidad actual)
 python -m src.bots.bot_1.main
 
-# Bot 2
+# Bot 2 (Numérico Alternativo)
 python -m src.bots.bot_2.main
 
-# Bot 3
+# Bot 3 (Visual Completo)
 python -m src.bots.bot_3.main
 
-# Bot 4
+# Bot 4 (Híbrido Estratégico)
 python -m src.bots.bot_4.main
 
-# Bot 5
+# Bot 5 (Visual + Numérico Separado)
 python -m src.bots.bot_5.main
+
+# Punto de entrada recomendado por estrategia/agente (VWAP + Gemini 3 Pro)
+# (cuando se cree un orquestador o CLI específica por estrategia)
+# from bots.strategies.vwap.gemini_3_pro.bot_1 import bot_1_main
 ```
 
 ### Ejecución Orquestada (Todos)

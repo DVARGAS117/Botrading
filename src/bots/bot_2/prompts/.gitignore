@@ -1,5 +1,0 @@
-# Ignorar todos los archivos de prompts
-*.txt
-
-# Mantener la carpeta en git
-!.gitignore
