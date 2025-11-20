@@ -4,7 +4,13 @@ Calculador de Indicadores para Estrategia INTRADAY.
 Este módulo implementa el cálculo y formateo de indicadores técnicos específicos
 para la estrategia INTRADAY, generando los paquetes JSON requeridos:
 - Paquete Táctico (M15): 200 velas con indicadores pre-calculados
-- Paquete Estratégico (D1): 30 velas con indicadores pre-calculados
+- Paquete Estratégico (D1): 30 velas CERRADAS con indicadores pre-calculados
+
+IMPORTANTE - Flujo de Operaciones:
+- Cada consulta a Gemini crea una NUEVA conversación (sin persistencia de contexto)
+- Cada operación tiene un operation_id ÚNICO para tracking de costos
+- D1 package: Solo velas cerradas (excluye día actual)
+- M15 package: Siempre 200 velas completas (no actualizaciones incrementales)
 
 Todos los indicadores se pre-calculan correctamente, asegurando que cada vela
 tenga su indicador calculado con el histórico necesario.
@@ -17,9 +23,35 @@ from typing import Dict, List, Optional
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import uuid
 
 from src.core.mt5_data_extractor import MT5DataExtractor, Timeframe, OHLCVData
 from src.core.indicator_calculator import IndicatorCalculator
+
+
+# ==================== FUNCIONES AUXILIARES ====================
+
+def generate_operation_id(bot_id: int, symbol: str) -> str:
+    """
+    Genera un operation_id único para tracking de costos.
+    
+    Este ID se usa para agrupar todas las consultas relacionadas con una
+    operación específica en IAQueryRepository, permitiendo calcular el
+    costo total de tokens por operación.
+    
+    Formato: "INTRADAY_{bot_id}_{symbol}_{timestamp}_{uuid}"
+    Ejemplo: "INTRADAY_101_EURUSD_20251119_143025_a3f7"
+    
+    Args:
+        bot_id: ID del bot (101 para INTRADAY Bot 1)
+        symbol: Símbolo operado (ej: "EURUSD")
+    
+    Returns:
+        operation_id único como string
+    """
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    unique_id = str(uuid.uuid4())[:8]  # Primeros 8 caracteres del UUID
+    return f"INTRADAY_{bot_id}_{symbol}_{timestamp}_{unique_id}"
 
 
 @dataclass
@@ -198,23 +230,26 @@ class IntradayIndicatorCalculator:
         """
         Calcula el PAQUETE ESTRATÉGICO (D1) con pre-cálculo correcto.
         
+        IMPORTANTE: Solo retorna velas CERRADAS (excluye la vela del día actual).
+        Esto garantiza que todos los datos sean definitivos y no cambien.
+        
         Para asegurar que EMA 200 esté correctamente calculada en todas las velas,
         se obtienen velas adicionales de histórico.
         
         Args:
             symbol: Símbolo a analizar (ej: "EURUSD")
-            candles_to_return: Número de velas a retornar (default: 30)
+            candles_to_return: Número de velas cerradas a retornar (default: 30)
         
         Returns:
-            Lista de IntradayCandle_D1 con indicadores calculados
+            Lista de IntradayCandle_D1 con indicadores calculados (solo velas cerradas)
         
         Raises:
             ValueError: Si no hay suficientes datos históricos
         """
         # Para 30 velas con EMA 200 válida, necesitamos:
-        # 30 (velas a retornar) + 200 (período EMA) = 230 velas mínimo
+        # 30 (velas a retornar) + 1 (vela actual a excluir) + 200 (período EMA) = 231 velas mínimo
         # Agregamos margen de seguridad
-        total_candles_needed = candles_to_return + 210  # 240 velas totales
+        total_candles_needed = candles_to_return + 211  # 241 velas totales
         
         # Obtener datos históricos D1
         ohlcv_data = self.data_extractor.get_ohlcv(
@@ -240,11 +275,13 @@ class IntradayIndicatorCalculator:
         prev_high = df['high'].shift(1)
         prev_low = df['low'].shift(1)
         
-        # Tomar solo las últimas N velas
+        # Excluir la última vela (día actual, aún no cerrada)
+        # Tomar solo las N velas CERRADAS (excluyendo la última)
         result = []
-        start_idx = len(df) - candles_to_return
+        end_idx = len(df) - 1  # Excluir última vela
+        start_idx = end_idx - candles_to_return
         
-        for i in range(start_idx, len(df)):
+        for i in range(start_idx, end_idx):
             candle = IntradayCandle_D1(
                 date=df.index[i].strftime('%Y-%m-%d'),
                 close=float(df['close'].iloc[i]),
@@ -373,15 +410,19 @@ class IntradayIndicatorCalculator:
         """
         Obtiene ambos paquetes INTRADAY completos en formato JSON-ready.
         
+        IMPORTANTE: 
+        - Paquete M15: Últimas 200 velas (incluye vela actual en formación)
+        - Paquete D1: Últimas 30 velas CERRADAS (excluye día actual)
+        
         Args:
             symbol: Símbolo a analizar
             tactical_candles: Número de velas M15 (default: 200)
-            strategic_candles: Número de velas D1 (default: 30)
+            strategic_candles: Número de velas D1 cerradas (default: 30)
         
         Returns:
             Diccionario con dos claves:
-            - 'tactical_m15': Lista de diccionarios con datos M15
-            - 'strategic_d1': Lista de diccionarios con datos D1
+            - 'tactical_m15': Lista de diccionarios con datos M15 (200 velas)
+            - 'strategic_d1': Lista de diccionarios con datos D1 cerrados (30 velas)
         """
         # Calcular paquete táctico
         tactical = self.calculate_tactical_package(symbol, tactical_candles)

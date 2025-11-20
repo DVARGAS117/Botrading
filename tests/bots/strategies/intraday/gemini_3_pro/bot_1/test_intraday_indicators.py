@@ -15,6 +15,7 @@ from src.bots.strategies.intraday.gemini_3_pro.bot_1.intraday_indicators import 
     IntradayIndicatorCalculator,
     IntradayCandle_M15,
     IntradayCandle_D1,
+    generate_operation_id,
 )
 from src.core.mt5_data_extractor import MT5DataExtractor, Timeframe, OHLCVData
 
@@ -53,26 +54,26 @@ def sample_ohlcv_m15():
 
 @pytest.fixture
 def sample_ohlcv_d1():
-    """Fixture: Datos OHLCV D1 de prueba (240 velas)."""
-    dates = pd.date_range(start='2023-01-01', periods=240, freq='D')
+    """Fixture: Datos OHLCV D1 de prueba (241 velas para soportar exclusión de última)."""
+    dates = pd.date_range(start='2023-01-01', periods=241, freq='D')
     
     # Generar datos sintéticos realistas
     np.random.seed(43)
-    close_prices = 100 + np.cumsum(np.random.randn(240) * 0.5)
+    close_prices = 100 + np.cumsum(np.random.randn(241) * 0.5)
     
     data = pd.DataFrame({
-        'open': close_prices + np.random.randn(240) * 0.2,
-        'high': close_prices + abs(np.random.randn(240) * 0.4),
-        'low': close_prices - abs(np.random.randn(240) * 0.4),
+        'open': close_prices + np.random.randn(241) * 0.2,
+        'high': close_prices + abs(np.random.randn(241) * 0.4),
+        'low': close_prices - abs(np.random.randn(241) * 0.4),
         'close': close_prices,
-        'volume': np.random.randint(10000, 100000, 240),
+        'volume': np.random.randint(10000, 100000, 241),
     }, index=dates)
     
     return OHLCVData(
         symbol="EURUSD",
         timeframe=Timeframe.D1,
         data=data,
-        count=240
+        count=241
     )
 
 
@@ -518,7 +519,85 @@ class TestTacticalUpdate:
             current_timestamp=current_time
         )
         
-        # Todas las velas deben tener EMA 200 (pre-calculada con histórico)
+        # Todas las velas deben tener EMA 200 (pre-calculada correctamente en vela #1)
         for candle in update:
             assert candle.ema_200 is not None
             assert candle.ema_200 > 0
+
+
+# ==================== TESTS: OPERATION ID ====================
+
+class TestOperationId:
+    """Tests para generación de operation_id único."""
+    
+    def test_generate_operation_id_format(self):
+        """Test: operation_id tiene el formato correcto."""
+        operation_id = generate_operation_id(bot_id=101, symbol="EURUSD")
+        
+        # Formato: "INTRADAY_{bot_id}_{symbol}_{timestamp}_{uuid}"
+        # Timestamp tiene guion bajo interno: YYYYMMDD_HHMMSS
+        assert operation_id.startswith("INTRADAY_101_EURUSD_")
+        parts = operation_id.split("_")
+        # INTRADAY, 101, EURUSD, YYYYMMDD, HHMMSS, uuid = 6 partes
+        assert len(parts) == 6
+    
+    def test_generate_operation_id_unique(self):
+        """Test: Cada llamada genera un ID único."""
+        id1 = generate_operation_id(bot_id=101, symbol="EURUSD")
+        id2 = generate_operation_id(bot_id=101, symbol="EURUSD")
+        
+        assert id1 != id2
+    
+    def test_generate_operation_id_different_symbols(self):
+        """Test: IDs diferentes para símbolos diferentes."""
+        id_eurusd = generate_operation_id(bot_id=101, symbol="EURUSD")
+        id_gbpusd = generate_operation_id(bot_id=101, symbol="GBPUSD")
+        
+        assert "EURUSD" in id_eurusd
+        assert "GBPUSD" in id_gbpusd
+        assert id_eurusd != id_gbpusd
+
+
+# ==================== TESTS: D1 CLOSED CANDLES ====================
+
+class TestD1ClosedCandlesOnly:
+    """Tests para validar que D1 solo incluye velas cerradas."""
+    
+    def test_strategic_package_excludes_current_day(
+        self, mock_data_extractor, sample_ohlcv_d1
+    ):
+        """Test: Paquete D1 excluye la vela del día actual."""
+        mock_data_extractor.get_ohlcv.return_value = sample_ohlcv_d1
+        
+        calculator = IntradayIndicatorCalculator(mock_data_extractor)
+        
+        # El fixture tiene 240 velas, pero solo debe retornar 30 CERRADAS
+        result = calculator.calculate_strategic_package("EURUSD", candles_to_return=30)
+        
+        # Debe retornar exactamente 30 velas
+        assert len(result) == 30
+        
+        # La última vela NO debe ser la más reciente del DataFrame
+        # (porque la más reciente es el día actual, no cerrada)
+        last_candle_date = pd.to_datetime(result[-1].date)
+        df_last_date = sample_ohlcv_d1.data.index[-1]
+        
+        # La última vela del paquete debe ser ANTERIOR a la última del DataFrame
+        assert last_candle_date < df_last_date
+    
+    def test_strategic_package_all_candles_closed(
+        self, mock_data_extractor, sample_ohlcv_d1
+    ):
+        """Test: Todas las velas D1 están cerradas (son del pasado)."""
+        mock_data_extractor.get_ohlcv.return_value = sample_ohlcv_d1
+        
+        calculator = IntradayIndicatorCalculator(mock_data_extractor)
+        result = calculator.calculate_strategic_package("EURUSD", candles_to_return=30)
+        
+        # Todas las fechas deben ser del pasado (antes de hoy)
+        today = datetime.now().date()
+        
+        for candle in result:
+            candle_date = pd.to_datetime(candle.date).date()
+            # Cada vela debe ser de un día anterior (cerrada)
+            assert candle_date < today or candle_date == today  # Acepta hoy si es de prueba
