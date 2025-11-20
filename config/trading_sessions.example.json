@@ -1,0 +1,93 @@
+{
+    "_comment": "Configuración de horarios de trading por símbolo y sesión (Hora PET/Lima GMT-5)",
+    "_usage": "Copia este archivo a trading_sessions.json y ajusta según tus necesidades",
+    "sessions": {
+        "londres": {
+            "start": "02:00",
+            "end": "05:00",
+            "symbols": [
+                "EURUSD",
+                "GBPUSD",
+                "EURGBP"
+            ],
+            "strategies": [
+                "A_tendencia",
+                "C_breakout"
+            ],
+            "risk_level": "medio",
+            "description": "Sesión de Londres - Volatilidad media"
+        },
+        "ny_londres_overlap": {
+            "start": "08:00",
+            "end": "11:00",
+            "symbols": [
+                "EURUSD",
+                "GBPUSD",
+                "USDCAD",
+                "USDCHF"
+            ],
+            "strategies": [
+                "A_tendencia",
+                "B_rango",
+                "C_breakout"
+            ],
+            "risk_level": "alto",
+            "description": "Overlap NY + Londres - MÁXIMA VOLATILIDAD Y LIQUIDEZ"
+        },
+        "ny_tarde": {
+            "start": "11:00",
+            "end": "13:00",
+            "symbols": [
+                "EURUSD",
+                "USDCAD"
+            ],
+            "strategies": [
+                "B_rango"
+            ],
+            "risk_level": "bajo",
+            "description": "NY Tarde - Movimientos lentos, operativa de rango"
+        },
+        "dead_zone": {
+            "start": "13:00",
+            "end": "18:00",
+            "symbols": [],
+            "strategies": [],
+            "risk_level": "ninguno",
+            "description": "ZONA MUERTA - NO OPERAR (Spreads altos, sin liquidez)"
+        },
+        "asia": {
+            "start": "19:00",
+            "end": "00:00",
+            "symbols": [
+                "USDJPY",
+                "AUDUSD",
+                "NZDUSD"
+            ],
+            "strategies": [
+                "B_rango"
+            ],
+            "risk_level": "bajo",
+            "description": "Sesión Asiática - Movimientos de rango"
+        },
+        "asia_madrugada": {
+            "start": "00:00",
+            "end": "02:00",
+            "symbols": [
+                "USDJPY",
+                "AUDUSD",
+                "NZDUSD"
+            ],
+            "strategies": [
+                "B_rango"
+            ],
+            "risk_level": "bajo",
+            "description": "Asia Madrugada - Continuación sesión asiática"
+        }
+    },
+    "global_rules": {
+        "allow_reevaluation_outside_hours": true,
+        "description": "Si true, permite consultar IA fuera de horario SOLO para reevaluar posiciones abiertas"
+    },
+    "timezone": "America/Lima",
+    "timezone_offset": "GMT-5"
+}

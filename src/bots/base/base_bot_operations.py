@@ -47,6 +47,7 @@ from src.core.mt5_connection import MT5Connection as _LegacyMT5Connection  # Com
 MT5Connection = _LegacyMT5Connection
 from src.core.config_loader import ConfigLoader, ConfigurationError
 from src.core.logger import get_bot_logger
+from src.core.trading_session_manager import TradingSessionManager
 
 
 class BotOperationError(Exception):
@@ -164,6 +165,8 @@ class BaseBotOperations(ABC):
         self.position_sizer: Optional[PositionSizer] = None
         self.symbol_spec_extractor: Optional[SymbolSpecificationExtractor] = None
         self.magic_number_generator: Optional[MagicNumberGenerator] = None
+        # Gestor de sesiones de trading
+        self.session_manager: Optional[TradingSessionManager] = None
         
         # Estado del bot
         self.is_initialized = False
@@ -289,6 +292,18 @@ class BaseBotOperations(ABC):
                     extra={'error': str(oe)}
                 )
             
+            # 9. Trading Session Manager
+            try:
+                self.session_manager = TradingSessionManager()
+                self.logger.info("✅ TradingSessionManager inicializado")
+            except Exception as se:
+                self.logger.warning(
+                    f"No se pudo cargar TradingSessionManager: {se}. "
+                    "Se permitirá trading en cualquier horario.",
+                    extra={'error': str(se)}
+                )
+                # Continuar sin session_manager (comportamiento legacy)
+            
             self.is_initialized = True
             self.logger.info("✅ Todos los componentes inicializados correctamente")
             
@@ -354,6 +369,46 @@ class BaseBotOperations(ABC):
         # TODO: Agregar lógica de objetivo diario si se desea
         
         return False
+    
+    def _should_query_symbol(self, symbol: str) -> Tuple[bool, str]:
+        """
+        Determina si se debe consultar a la IA para un símbolo dado.
+        
+        Verifica:
+        1. Si el símbolo está en horario de trading según config/trading_sessions.json
+        2. Si tiene posición abierta (permite reevaluación fuera de horario)
+        
+        Args:
+            symbol: Símbolo a verificar (ej: "EURUSD")
+        
+        Returns:
+            Tupla (debe_consultar, mensaje_info)
+            - debe_consultar: True si debe hacer query a IA
+            - mensaje_info: Descripción del motivo
+        """
+        # Si no hay session_manager o no tiene sesiones configuradas, permitir siempre
+        if self.session_manager is None or len(self.session_manager.sessions) == 0:
+            return True, "SessionManager no disponible (permitido por defecto)"
+        
+        # Verificar si tiene posición abierta
+        has_position = False
+        try:
+            if self.mt5_connection:
+                positions = self.mt5_connection.get_positions(symbol=symbol)
+                has_position = len(positions) > 0
+        except Exception as e:
+            self.logger.warning(
+                f"Error verificando posición de {symbol}: {e}",
+                extra={'symbol': symbol, 'error': str(e)}
+            )
+        
+        # Consultar al SessionManager
+        is_tradeable, reason = self.session_manager.is_symbol_tradeable(
+            symbol=symbol,
+            has_open_position=has_position
+        )
+        
+        return is_tradeable, reason
     
     def get_market_context(self) -> MarketContext:
         """
@@ -460,6 +515,23 @@ class BaseBotOperations(ABC):
         for symbol in self.config.symbols:
             try:
                 self.logger.info(f"📊 Procesando {symbol}...")
+                
+                # 3a. Verificar si el símbolo puede operarse en el horario actual
+                should_query_ai, session_info = self._should_query_symbol(symbol)
+                
+                if not should_query_ai:
+                    self.logger.info(
+                        f"⏰ {symbol} fuera de horario. {session_info}",
+                        extra={'symbol': symbol, 'reason': session_info}
+                    )
+                    continue
+                
+                # Log información de sesión activa
+                if "Sesión activa:" in session_info:
+                    self.logger.info(
+                        f"✅ {symbol} en horario permitido. {session_info}",
+                        extra={'symbol': symbol, 'session_info': session_info}
+                    )
                 
                 # Extraer datos y calcular indicadores
                 indicators, ohlcv_data_dict = self._calculate_all_indicators(symbol)

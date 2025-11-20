@@ -19,6 +19,9 @@ from src.bots.strategies.intraday.gemini_3_pro.bot_1.intraday_indicators import 
 )
 from src.core.ia_query_repository import IAQueryRepository, QueryType
 from src.core.mt5_data_extractor import MT5DataExtractor
+from src.core.operations_repository import OperationsRepository
+from src.core.position_manager import PositionManager
+from src.core.vertex_ai_client import VertexAIClient, VertexAIConfig
 from src.core.vwap_prompt_builder import MarketContext
 
 
@@ -43,13 +46,31 @@ class IntradayBot1Strategy(BaseBotOperations):
             config: Configuración del bot con parámetros de Gemini 3 Pro
         """
         super().__init__(config)
-
-        # Inicializar calculador de indicadores INTRADAY (usa self.data_extractor de la clase base)
-        self.indicator_calculator = IntradayIndicatorCalculator(self.data_extractor)
+        
+        # Indicador de que necesitamos IntradayIndicatorCalculator
+        self._use_intraday_calculator = True
         
         # Inicializar repositorio de consultas IA
         db_path = Path(__file__).parent.parent.parent.parent.parent.parent / "data" / "consultas_ia.db"
         self.ia_query_repository = IAQueryRepository(db_path)
+        
+        # Inicializar repositorio de operaciones
+        ops_db_path = Path(__file__).parent.parent.parent.parent.parent.parent / "data" / "operations.db"
+        self.operations_repo = OperationsRepository(ops_db_path)
+        
+        # Inicializar cliente Vertex AI (Gemini 3 Pro)
+        vertex_config = VertexAIConfig(
+            model="gemini-3-pro-preview",
+            temperature=0.7,
+            max_tokens=8192,
+            top_p=0.95,
+            timeout=120,
+        )
+        self.vertex_client = VertexAIClient(config=vertex_config)
+        
+        # Position manager se inicializará lazily cuando se necesite
+        # (porque mt5_connection solo está disponible después de initialize())
+        self._position_manager = None
         
         # Ruta a los prompts
         self.prompts_dir = Path(__file__).parent / "prompts"
@@ -65,6 +86,44 @@ class IntradayBot1Strategy(BaseBotOperations):
                 "prompts_dir": str(self.prompts_dir),
             },
         )
+    
+    def initialize(self) -> bool:
+        """Inicializa componentes base y luego crea IntradayIndicatorCalculator.
+        
+        Returns:
+            True si la inicialización fue exitosa, False en caso contrario
+        """
+        # Primero inicializar componentes base (MT5, data_extractor, etc.)
+        if not super().initialize():
+            return False
+        
+        # Ahora que data_extractor está disponible, crear IntradayIndicatorCalculator
+        self.indicator_calculator = IntradayIndicatorCalculator(self.data_extractor)
+        
+        self.logger.info(
+            "IntradayIndicatorCalculator inicializado",
+            extra={
+                "calculator_type": "IntradayIndicatorCalculator",
+            },
+        )
+        
+        return True
+    
+    @property
+    def position_manager(self) -> PositionManager:
+        """Property lazy para position_manager.
+        
+        Se inicializa solo cuando se accede por primera vez,
+        garantizando que mt5_connection ya esté disponible.
+        """
+        if self._position_manager is None:
+            if self.mt5_connection is None:
+                raise ValueError(
+                    "mt5_connection no está inicializada. "
+                    "Llama a initialize() antes de usar position_manager"
+                )
+            self._position_manager = PositionManager(self.mt5_connection)
+        return self._position_manager
 
     def prepare_data_for_ai(
         self,
@@ -118,8 +177,8 @@ class IntradayBot1Strategy(BaseBotOperations):
         
         try:
             packages = self.indicator_calculator.get_full_intraday_packages(symbol)
-            tactical_package = packages["tactical"]
-            strategic_package = packages["strategic"]
+            tactical_package = packages["tactical_m15"]
+            strategic_package = packages["strategic_d1"]
         except Exception as e:
             self.logger.error(
                 f"Error calculando paquetes INTRADAY para {symbol}: {e}",
@@ -172,12 +231,49 @@ class IntradayBot1Strategy(BaseBotOperations):
             "{strategic_package}", json.dumps(strategic_package, indent=2)
         )
         
-        # Si hay posición activa, agregar información de la posición
+        # Construir información de posición (con o sin posición activa)
         if has_active_position:
             current_position = self._get_current_position_info(symbol)
-            user_prompt = user_prompt.replace(
-                "{current_position}", json.dumps(current_position, indent=2)
-            )
+            
+            # Obtener SL inicial desde BD (operations table)
+            sl_inicial = self._get_initial_sl_from_db(symbol)
+            if sl_inicial is None:
+                # Fallback: usar SL actual
+                sl_inicial = current_position['sl']
+            
+            # Calcular riesgo inicial (R) con SL inicial
+            pip_value = 0.01 if "JPY" in symbol else 0.0001
+            risk_points = abs(current_position['price_open'] - sl_inicial)
+            risk_pips = risk_points / pip_value
+            
+            # Calcular PnL en R basado en SL inicial
+            if current_position['type'] == "LONG":
+                pnl_points = current_position['price_current'] - current_position['price_open']
+            else:
+                pnl_points = current_position['price_open'] - current_position['price_current']
+            pnl_r = pnl_points / risk_points if risk_points > 0 else 0.0
+            
+            # Determinar si SL fue ajustado
+            sl_ajustado_nota = ""
+            if abs(current_position['sl'] - sl_inicial) > pip_value * 0.1:  # Diferencia significativa
+                sl_ajustado_nota = f" (⚠️ SL inicial: {sl_inicial}, ajustado a: {current_position['sl']})"
+            
+            position_text = f"""POSICIÓN ACTIVA: {current_position['type']} @ {current_position['price_open']}
+- Volumen: {current_position['volume']} lotes
+- PnL Actual: ${current_position['profit']:.2f} USD ({current_position['pnl_pips']:.1f} pips = {pnl_r:.2f}R)
+- Stop Loss Actual: {current_position['sl']}{sl_ajustado_nota}
+- Take Profit: {current_position['tp']}
+- Precio Actual: {current_position['price_current']}
+- Duración: {current_position.get('duration', 'N/A')}
+- Riesgo Inicial (1R): {risk_pips:.1f} pips (basado en SL inicial: {sl_inicial})
+
+⚠️ PRIORIDAD: Gestiona esta posición. Evalúa si debe CERRARSE, AJUSTAR_SL_TP o MANTENERSE."""
+        else:
+            position_text = """POSICIÓN ACTUAL: NONE (Sin posición abierta)
+
+✅ Puedes evaluar nuevas oportunidades de entrada (COMPRAR/VENDER) si hay setup válido."""
+        
+        user_prompt = user_prompt.replace("{current_position}", position_text)
         
         # 5. Retornar diccionario completo
         self.logger.info(
@@ -268,14 +364,52 @@ class IntradayBot1Strategy(BaseBotOperations):
             },
         )
         
-        # TODO: Implementar llamada real a Gemini 3 Pro
-        # Por ahora usamos placeholder
-        ai_response = {
-            "response_text": "Placeholder response from Gemini 3 Pro",
-            "tokens_input": 1000,
-            "tokens_output": 500,
-            "cost_usd": 0.05,
-        }
+        # Construir prompt completo para Gemini
+        full_prompt = f"{system_prompt}\n\n{user_prompt}"
+        
+        # Llamar a Vertex AI (Gemini 3 Pro)
+        try:
+            gemini_response = self.vertex_client.send_prompt(full_prompt)
+            
+            if not gemini_response.success:
+                self.logger.error(
+                    f"Error en respuesta de Gemini para {symbol}: {gemini_response.error_message}",
+                    extra={
+                        "symbol": symbol,
+                        "operation_id": operation_id,
+                        "error_type": gemini_response.error_type,
+                    },
+                )
+                raise Exception(f"Gemini API error: {gemini_response.error_message}")
+            
+            ai_response = {
+                "response_text": gemini_response.content,
+                "tokens_input": gemini_response.tokens_input or 0,
+                "tokens_output": gemini_response.tokens_output or 0,
+                "cost_usd": gemini_response.cost or 0.0,
+            }
+            
+            self.logger.info(
+                f"Respuesta de Gemini recibida para {symbol}",
+                extra={
+                    "symbol": symbol,
+                    "operation_id": operation_id,
+                    "tokens_total": gemini_response.total_tokens,
+                    "cost_usd": ai_response["cost_usd"],
+                    "latency": gemini_response.latency,
+                },
+            )
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error consultando Gemini para {symbol}: {e}",
+                extra={
+                    "symbol": symbol,
+                    "operation_id": operation_id,
+                    "error": str(e),
+                },
+            )
+            raise
         
         # 3. Parsear respuesta
         try:
@@ -353,36 +487,86 @@ class IntradayBot1Strategy(BaseBotOperations):
         Convierte la respuesta en texto de Gemini 3 Pro a un formato
         estructurado que el bot puede ejecutar.
         
-        TODO: Implementar parser específico para respuestas INTRADAY
+        Gemini 3 Pro retorna JSON con la siguiente estructura esperada:
+        {
+            "accion": "COMPRAR" | "VENDER" | "NO_OPERAR" | "MANTENER" | "CERRAR" | "AJUSTAR_SL_TP",
+            "razonamiento": str,
+            "direccion": "LONG" | "SHORT" | None,
+            "stop_loss": float (opcional),
+            "take_profit": float (opcional),
+            "confianza": float (opcional, 0-100),
+            "estrategia_usada": str (opcional),
+            "diagnostico_mercado": str (opcional),
+        }
         
         Args:
-            response_text: Texto de respuesta de Gemini 3 Pro
+            response_text: Texto de respuesta de Gemini 3 Pro (JSON)
             
         Returns:
-            Diccionario con decisión estructurada:
-            {
-                "accion": "COMPRAR" | "VENDER" | "NO_OPERAR",
-                "razonamiento": str,
-                "direccion": "LONG" | "SHORT" | None,
-                "stop_loss": float (opcional),
-                "take_profit": float (opcional),
-                "confianza": float (opcional),
-            }
+            Diccionario con decisión estructurada
+            
+        Raises:
+            ValueError: Si el JSON es inválido o falta campo requerido
         """
-        # TODO: Implementar parser real cuando se definan los indicadores y formato de respuesta
-        # Por ahora retornamos estructura placeholder
-        
         self.logger.info(
-            "Parseando respuesta IA INTRADAY (placeholder)",
+            "Parseando respuesta IA INTRADAY",
             extra={"response_length": len(response_text)},
         )
         
-        # Placeholder: NO_OPERAR hasta que se implemente el parser
-        return {
-            "accion": "NO_OPERAR",
-            "razonamiento": "Parser INTRADAY pendiente de implementación",
-            "direccion": None,
-        }
+        try:
+            # Parsear JSON
+            parsed = json.loads(response_text)
+            
+            # Validar campos requeridos
+            if "accion" not in parsed:
+                raise ValueError("Respuesta JSON no contiene campo 'accion'")
+            
+            if "razonamiento" not in parsed:
+                raise ValueError("Respuesta JSON no contiene campo 'razonamiento'")
+            
+            # Validar acción
+            acciones_validas = ["COMPRAR", "VENDER", "NO_OPERAR", "MANTENER", "CERRAR", "AJUSTAR_SL_TP"]
+            if parsed["accion"] not in acciones_validas:
+                raise ValueError(
+                    f"Acción inválida: {parsed['accion']}. Debe ser una de: {acciones_validas}"
+                )
+            
+            # Extraer campos opcionales con valores por defecto
+            result = {
+                "accion": parsed["accion"],
+                "razonamiento": parsed["razonamiento"],
+                "direccion": parsed.get("direccion"),
+                "stop_loss": parsed.get("stop_loss"),
+                "take_profit": parsed.get("take_profit"),
+                "confianza": parsed.get("confianza"),
+                "estrategia_usada": parsed.get("estrategia_usada"),
+                "diagnostico_mercado": parsed.get("diagnostico_mercado"),
+            }
+            
+            self.logger.info(
+                f"Respuesta parseada: {result['accion']}",
+                extra={
+                    "accion": result["accion"],
+                    "direccion": result["direccion"],
+                    "confianza": result["confianza"],
+                },
+            )
+            
+            return result
+            
+        except json.JSONDecodeError as e:
+            self.logger.error(
+                f"Error parseando JSON de respuesta IA: {e}",
+                extra={"response_text": response_text[:200]},
+            )
+            raise ValueError(f"Respuesta no es JSON válido: {e}") from e
+        
+        except Exception as e:
+            self.logger.error(
+                f"Error procesando respuesta IA: {e}",
+                extra={"response_text": response_text[:200]},
+            )
+            raise
 
     def get_performance_metrics(self) -> Dict[str, Any]:
         """Obtiene métricas de rendimiento del bot INTRADAY.
@@ -443,6 +627,34 @@ class IntradayBot1Strategy(BaseBotOperations):
         # Placeholder para futura implementación
         return 0.0
 
+    def _get_initial_sl_from_db(self, symbol: str) -> Optional[float]:
+        """Recupera el SL inicial desde la BD para el símbolo activo.
+        
+        Args:
+            symbol: Símbolo de la posición
+            
+        Returns:
+            SL inicial o None si no se encuentra
+        """
+        try:
+            # Buscar operación abierta en BD por símbolo y magic number
+            operation = self.operations_repo.get_open_operation_for_symbol_and_magic(
+                symbol=symbol,
+                magic_number=self.config.bot_id
+            )
+            
+            if operation and operation.stop_loss_initial:
+                return operation.stop_loss_initial
+            
+            return None
+            
+        except Exception as e:
+            self.logger.warning(
+                f"Error obteniendo SL inicial desde BD para {symbol}: {e}",
+                extra={"symbol": symbol, "error": str(e)},
+            )
+            return None
+
     def _has_active_position(self, symbol: str) -> bool:
         """Verifica si hay una posición activa para el símbolo.
         
@@ -452,9 +664,33 @@ class IntradayBot1Strategy(BaseBotOperations):
         Returns:
             True si hay posición activa, False en caso contrario
         """
-        # TODO: Implementar verificación real con MetaTrader 5
-        # Por ahora retorna False (modo evaluación)
-        return False
+        try:
+            # Obtener posiciones del símbolo con el magic number del bot
+            positions = self.position_manager.get_positions_by_symbol_and_magic(
+                symbol=symbol,
+                magic=self.config.bot_id
+            )
+            
+            has_position = len(positions) > 0
+            
+            self.logger.debug(
+                f"Verificación de posición activa para {symbol}: {has_position}",
+                extra={
+                    "symbol": symbol,
+                    "has_position": has_position,
+                    "positions_count": len(positions),
+                },
+            )
+            
+            return has_position
+            
+        except Exception as e:
+            self.logger.warning(
+                f"Error verificando posición activa para {symbol}: {e}",
+                extra={"symbol": symbol, "error": str(e)},
+            )
+            # En caso de error, asumir que no hay posición
+            return False
 
     def _get_current_position_info(self, symbol: str) -> Dict[str, Any]:
         """Obtiene información de la posición activa.
@@ -470,18 +706,104 @@ class IntradayBot1Strategy(BaseBotOperations):
             - sl: Stop Loss
             - tp: Take Profit
             - pnl_points: PnL en puntos
+            - pnl_usd: PnL en USD
             - pnl_r: PnL en múltiplos de R
+            - volume: Volumen (lotes)
             - open_time: Timestamp de apertura
+            - ticket: Ticket de la orden
         """
-        # TODO: Implementar obtención real con MetaTrader 5
-        # Por ahora retorna estructura placeholder
-        return {
-            "type": "LONG",
-            "entry_price": 0.0,
-            "current_price": 0.0,
-            "sl": 0.0,
-            "tp": 0.0,
-            "pnl_points": 0.0,
-            "pnl_r": 0.0,
-            "open_time": datetime.now().isoformat(),
-        }
+        try:
+            # Obtener posiciones del símbolo con el magic number del bot
+            positions = self.position_manager.get_positions_by_symbol_and_magic(
+                symbol=symbol,
+                magic=self.config.bot_id
+            )
+            
+            if not positions:
+                self.logger.warning(
+                    f"No se encontró posición activa para {symbol}",
+                    extra={"symbol": symbol},
+                )
+                # Retornar estructura vacía
+                return {
+                    "type": None,
+                    "price_open": 0.0,
+                    "price_current": 0.0,
+                    "sl": 0.0,
+                    "tp": 0.0,
+                    "pnl_points": 0.0,
+                    "pnl_pips": 0.0,
+                    "profit": 0.0,
+                    "pnl_r": 0.0,
+                    "volume": 0.0,
+                    "open_time": datetime.now().isoformat(),
+                    "ticket": 0,
+                    "duration": "0m",
+                }
+            
+            # Tomar la primera posición (debería haber solo una por símbolo)
+            position = positions[0]
+            
+            # Determinar tipo de posición
+            position_type = "LONG" if position.type == 0 else "SHORT"  # 0=BUY, 1=SELL
+            
+            # Calcular PnL en puntos
+            if position_type == "LONG":
+                pnl_points = position.price_current - position.price_open
+            else:
+                pnl_points = position.price_open - position.price_current
+            
+            # Calcular PnL en pips (para pares forex: 1 pip = 0.0001, excepto JPY = 0.01)
+            pip_value = 0.01 if "JPY" in symbol else 0.0001
+            pnl_pips = pnl_points / pip_value
+            
+            # Calcular PnL en R (asumiendo que SL representa 1R)
+            risk_points = abs(position.price_open - position.sl) if position.sl > 0 else 0.0
+            pnl_r = pnl_points / risk_points if risk_points > 0 else 0.0
+            
+            # Calcular duración de la posición
+            if hasattr(position.time_open, 'timestamp'):
+                duration_seconds = (datetime.now().timestamp() - position.time_open.timestamp())
+            else:
+                duration_seconds = 0
+            
+            hours = int(duration_seconds // 3600)
+            minutes = int((duration_seconds % 3600) // 60)
+            duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+            
+            result = {
+                "type": position_type,
+                "price_open": position.price_open,
+                "price_current": position.price_current,
+                "sl": position.sl,
+                "tp": position.tp,
+                "pnl_points": pnl_points,
+                "pnl_pips": round(pnl_pips, 1),
+                "profit": position.profit,  # USD
+                "pnl_r": round(pnl_r, 2),
+                "volume": position.volume,
+                "open_time": position.time_open.isoformat() if hasattr(position.time_open, 'isoformat') else str(position.time_open),
+                "ticket": position.ticket,
+                "duration": duration_str,
+            }
+            
+            self.logger.info(
+                f"Información de posición obtenida para {symbol}",
+                extra={
+                    "symbol": symbol,
+                    "position_type": position_type,
+                    "pnl_r": result["pnl_r"],
+                    "profit": result["profit"],
+                    "pnl_pips": result["pnl_pips"],
+                    "duration": result["duration"],
+                },
+            )
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error obteniendo información de posición para {symbol}: {e}",
+                extra={"symbol": symbol, "error": str(e)},
+            )
+            raise

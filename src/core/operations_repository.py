@@ -80,6 +80,8 @@ class Operation:
     actual_entry_price: Optional[float] = None
     stop_loss: float = 0.0
     take_profit: float = 0.0
+    stop_loss_initial: Optional[float] = None  # SL al momento de apertura (para trailing stop)
+    take_profit_initial: Optional[float] = None  # TP al momento de apertura
     lot_size: float = 0.0
     risk_percentage: float = 0.0
     
@@ -197,7 +199,9 @@ class OperationsRepository:
         profit_loss: Optional[float] = None,
         open_time: Optional[datetime] = None,
         close_time: Optional[datetime] = None,
-        conversation_id: Optional[str] = None
+        conversation_id: Optional[str] = None,
+        stop_loss_initial: Optional[float] = None,
+        take_profit_initial: Optional[float] = None
     ) -> Operation:
         """
         Crea una nueva operación en la base de datos.
@@ -220,6 +224,8 @@ class OperationsRepository:
             open_time: Tiempo de apertura (opcional, usa datetime.now() si no se provee)
             close_time: Tiempo de cierre (opcional)
             conversation_id: ID de conversación con IA (opcional)
+            stop_loss_initial: SL inicial al abrir (opcional, usa stop_loss si no se provee)
+            take_profit_initial: TP inicial al abrir (opcional, usa take_profit si no se provee)
         
         Returns:
             Operation: La operación creada con su ID asignado
@@ -239,6 +245,12 @@ class OperationsRepository:
         if open_time is None:
             open_time = datetime.now()
         
+        # Usar SL/TP actuales como iniciales si no se proveen
+        if stop_loss_initial is None:
+            stop_loss_initial = stop_loss
+        if take_profit_initial is None:
+            take_profit_initial = take_profit
+        
         now = datetime.now()
         
         try:
@@ -249,15 +261,18 @@ class OperationsRepository:
                     INSERT INTO operations (
                         magic_number, bot_id, ia_id, order_type, symbol, direction,
                         suggested_price, actual_entry_price, stop_loss, take_profit,
+                        stop_loss_initial, take_profit_initial,
                         lot_size, risk_percentage, status, profit_loss,
                         open_time, close_time, conversation_id,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     magic_number, bot_id, ia_id,
                     order_type.value, symbol, direction.value,
                     suggested_price, actual_entry_price,
-                    stop_loss, take_profit, lot_size, risk_percentage,
+                    stop_loss, take_profit,
+                    stop_loss_initial, take_profit_initial,
+                    lot_size, risk_percentage,
                     status.value, profit_loss,
                     open_time.isoformat() if open_time else None,
                     close_time.isoformat() if close_time else None,
@@ -646,6 +661,8 @@ class OperationsRepository:
                         actual_entry_price REAL,
                         stop_loss REAL NOT NULL,
                         take_profit REAL NOT NULL,
+                        stop_loss_initial REAL,
+                        take_profit_initial REAL,
                         lot_size REAL NOT NULL,
                         risk_percentage REAL NOT NULL,
                         
@@ -722,6 +739,8 @@ class OperationsRepository:
             actual_entry_price=row['actual_entry_price'],
             stop_loss=row['stop_loss'],
             take_profit=row['take_profit'],
+            stop_loss_initial=row.get('stop_loss_initial'),
+            take_profit_initial=row.get('take_profit_initial'),
             lot_size=row['lot_size'],
             risk_percentage=row['risk_percentage'],
             status=OperationStatus(row['status']),

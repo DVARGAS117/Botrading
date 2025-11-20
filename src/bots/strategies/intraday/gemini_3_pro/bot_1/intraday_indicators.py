@@ -202,8 +202,21 @@ class IntradayIndicatorCalculator:
         start_idx = len(df) - candles_to_return
         
         for i in range(start_idx, len(df)):
+            # Obtener timestamp del DataFrame (puede estar en index o column 'time')
+            if 'time' in df.columns:
+                timestamp = df['time'].iloc[i]
+            else:
+                timestamp = df.index[i]
+            
+            # Convertir timestamp a string si es datetime
+            if hasattr(timestamp, 'strftime'):
+                timestamp_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                # Si es int/timestamp unix, convertir
+                timestamp_str = pd.to_datetime(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+            
             candle = IntradayCandle_M15(
-                timestamp=df.index[i].strftime('%Y-%m-%d %H:%M:%S'),
+                timestamp=timestamp_str,
                 open=float(df['open'].iloc[i]),
                 high=float(df['high'].iloc[i]),
                 low=float(df['low'].iloc[i]),
@@ -282,8 +295,20 @@ class IntradayIndicatorCalculator:
         start_idx = end_idx - candles_to_return
         
         for i in range(start_idx, end_idx):
+            # Obtener timestamp del DataFrame
+            if 'time' in df.columns:
+                timestamp = df['time'].iloc[i]
+            else:
+                timestamp = df.index[i]
+            
+            # Convertir timestamp a string
+            if hasattr(timestamp, 'strftime'):
+                date_str = timestamp.strftime('%Y-%m-%d')
+            else:
+                date_str = pd.to_datetime(timestamp).strftime('%Y-%m-%d')
+            
             candle = IntradayCandle_D1(
-                date=df.index[i].strftime('%Y-%m-%d'),
+                date=date_str,
                 close=float(df['close'].iloc[i]),
                 ema_200=float(ema_200.iloc[i]) if not pd.isna(ema_200.iloc[i]) else None,
                 atr_14=float(atr_14.iloc[i]) if not pd.isna(atr_14.iloc[i]) else None,
@@ -376,13 +401,29 @@ class IntradayIndicatorCalculator:
         # Filtrar solo las velas que están en el rango [last_timestamp, current_timestamp]
         result = []
         for i in range(len(df)):
-            candle_time = df.index[i].to_pydatetime()
+            # Obtener timestamp del DataFrame
+            if 'time' in df.columns:
+                timestamp = df['time'].iloc[i]
+            else:
+                timestamp = df.index[i]
+            
+            # Convertir a datetime si es necesario
+            if hasattr(timestamp, 'to_pydatetime'):
+                candle_time = timestamp.to_pydatetime()
+            else:
+                candle_time = pd.to_datetime(timestamp)
             
             # Incluir velas que cerraron después de last_timestamp
             # y antes o igual a current_timestamp
             if last_timestamp < candle_time <= current_timestamp:
+                # Convertir timestamp a string
+                if hasattr(timestamp, 'strftime'):
+                    timestamp_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    timestamp_str = pd.to_datetime(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                
                 candle = IntradayCandle_M15(
-                    timestamp=df.index[i].strftime('%Y-%m-%d %H:%M:%S'),
+                    timestamp=timestamp_str,
                     open=float(df['open'].iloc[i]),
                     high=float(df['high'].iloc[i]),
                     low=float(df['low'].iloc[i]),
