@@ -928,3 +928,96 @@ class IntradayBot1Strategy(BaseBotOperations):
                 f"Error al abrir/registrar posición en {symbol}: {e}",
                 extra={"symbol": symbol, "error": str(e)}
             )
+    
+    def _execute_update_position(self, symbol: str, decision: Dict[str, Any]) -> None:
+        """Sobrescribe método base para actualizar BD después de ajustar SL/TP.
+        
+        Este método:
+        1. Llama a la implementación base para modificar SL/TP en MT5
+        2. Actualiza el registro en la base de datos con los nuevos valores
+        
+        Args:
+            symbol: Símbolo del activo (ej: EURUSD)
+            decision: Diccionario con la decisión de la IA incluyendo stop_loss y take_profit
+        """
+        # 1. Ejecutar ajuste en MT5 (método base)
+        super()._execute_update_position(symbol, decision)
+        
+        # 2. Actualizar registro en BD
+        try:
+            # Obtener posición de MT5
+            if not self._position_manager:
+                self.logger.warning("PositionManager no disponible, no se actualizará BD")
+                return
+            
+            positions = self._position_manager.get_positions_by_symbol(symbol)
+            if not positions:
+                self.logger.warning(f"No se encontró posición para {symbol}, no se actualizará BD")
+                return
+            
+            position = positions[0]
+            ticket = position.ticket
+            
+            # Buscar operación en BD por magic_number (ticket)
+            operation = self.operations_repo.get_operation_by_magic_number(ticket)
+            
+            if not operation:
+                self.logger.warning(
+                    f"No se encontró operación en BD con ticket {ticket}",
+                    extra={"ticket": ticket, "symbol": symbol}
+                )
+                return
+            
+            if operation.id is None:
+                self.logger.error("Operación sin ID, no se puede actualizar")
+                return
+            
+            # Extraer nuevos valores de SL/TP
+            new_sl = decision.get("stop_loss")
+            new_tp = decision.get("take_profit")
+            
+            # Si no se especifica uno, mantener el actual
+            if new_sl is None:
+                new_sl = operation.stop_loss
+            if new_tp is None:
+                new_tp = operation.take_profit
+            
+            self.logger.info(
+                f"Actualizando operación en BD: ID={operation.id}",
+                extra={
+                    "operation_id": operation.id,
+                    "sl_anterior": operation.stop_loss,
+                    "sl_nuevo": new_sl,
+                    "tp_anterior": operation.take_profit,
+                    "tp_nuevo": new_tp,
+                    "sl_inicial": operation.stop_loss_initial,  # Se mantiene sin cambios
+                }
+            )
+            
+            # Actualizar operación en BD (SL inicial NO se modifica)
+            updated_operation = self.operations_repo.update_operation(
+                operation_id=operation.id,
+                stop_loss=float(new_sl),
+                take_profit=float(new_tp),
+                # stop_loss_initial y take_profit_initial NO se modifican
+            )
+            
+            if updated_operation:
+                self.logger.info(
+                    f"✅ Operación actualizada en BD: ID={updated_operation.id}",
+                    extra={
+                        "operation_id": updated_operation.id,
+                        "stop_loss": updated_operation.stop_loss,
+                        "take_profit": updated_operation.take_profit,
+                        "stop_loss_initial": updated_operation.stop_loss_initial,  # Sin cambios
+                    }
+                )
+            else:
+                self.logger.warning(f"No se pudo actualizar operación en BD: ID={operation.id}")
+            
+        except Exception as e:
+            self.logger.error(
+                f"Error al actualizar operación en BD para {symbol}: {e}",
+                extra={"symbol": symbol, "error": str(e)}
+            )
+

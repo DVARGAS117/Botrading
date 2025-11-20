@@ -832,21 +832,23 @@ class BaseBotOperations(ABC):
         accion_raw = decision.get("accion", "NO_OPERAR")
         accion = str(accion_raw).upper()
         # Aceptar sinónimos provenientes de parseadores alternativos
-        if accion in ("ABRIR",):
+        if accion in ("ABRIR", "COMPRAR", "VENDER"):
             accion = "OPERAR"
         if accion in ("ESPERAR",):
             accion = "NO_OPERAR"
+        if accion in ("AJUSTAR_SL_TP",):
+            accion = "ACTUALIZAR"
 
         if accion == "OPERAR":
             self._execute_open_position(symbol, decision)
         elif accion == "MANTENER":
-            self.logger.info(f"Mantener posiciones actuales en {symbol}")
+            self.logger.info(f"✋ Mantener posición actual en {symbol}")
         elif accion == "CERRAR":
             self._execute_close_position(symbol, decision)
         elif accion == "ACTUALIZAR":
             self._execute_update_position(symbol, decision)
         else:  # NO_OPERAR
-            self.logger.info(f"No operar en {symbol}")
+            self.logger.info(f"⏸️  No operar en {symbol}")
     
     def _execute_open_position(self, symbol: str, decision: Dict[str, Any]) -> None:
         """Abre nueva posición (dual si está habilitado)"""
@@ -981,27 +983,67 @@ class BaseBotOperations(ABC):
             )
     
     def _execute_update_position(self, symbol: str, decision: Dict[str, Any]) -> None:
-        """Actualiza SL/TP de posición abierta"""
+        """Actualiza SL/TP de posición abierta (trailing stop)"""
         self.logger.info(
-            f"🔄 Actualizando posición en {symbol}",
+            f"🔄 Actualizando SL/TP en {symbol}",
             extra={'decision': decision}
         )
         
         try:
-            if not self.order_manager:
-                self.logger.error("OrderManager no inicializado")
+            if not self.order_manager or not self.mt5_connection:
+                self.logger.error("OrderManager o MT5Connection no inicializado")
                 return
-            ticket = decision.get("ticket")
-            new_sl = decision.get("nuevo_stop_loss")
-            new_tp = decision.get("nuevo_take_profit")
-            if not ticket or (new_sl is None and new_tp is None):
-                self.logger.warning("Faltan 'ticket' o nuevos valores SL/TP para actualizar")
+            
+            # Obtener posición actual
+            positions = self.mt5_connection.get_positions(symbol=symbol)
+            if not positions:
+                self.logger.warning(f"No se encontró posición abierta para {symbol}")
                 return
+            
+            position = positions[0]  # Tomar primera posición
+            ticket = position.ticket
+            
+            # Extraer nuevos valores de SL/TP del decision
+            # La IA retorna stop_loss y take_profit como valores finales
+            new_sl = decision.get("stop_loss")
+            new_tp = decision.get("take_profit")
+            
+            if new_sl is None and new_tp is None:
+                self.logger.warning("No se especificaron nuevos valores de SL/TP para actualizar")
+                return
+            
+            # Si no se especifica uno, mantener el actual
+            if new_sl is None:
+                new_sl = position.sl
+            if new_tp is None:
+                new_tp = position.tp
+            
+            self.logger.info(
+                f"📊 Ajustando posición #{ticket}",
+                extra={
+                    'ticket': ticket,
+                    'sl_anterior': position.sl,
+                    'sl_nuevo': new_sl,
+                    'tp_anterior': position.tp,
+                    'tp_nuevo': new_tp,
+                }
+            )
+            
+            # Modificar posición en MT5
             self.order_manager.modify_position(
                 ticket=int(ticket),
-                sl=float(new_sl) if new_sl is not None else 0.0,
-                tp=float(new_tp) if new_tp is not None else 0.0
+                sl=float(new_sl),
+                tp=float(new_tp)
             )
+            
+            self.logger.info(
+                f"✅ Posición #{ticket} actualizada correctamente",
+                extra={
+                    'nuevo_sl': new_sl,
+                    'nuevo_tp': new_tp,
+                }
+            )
+            
         except Exception as e:
             self.logger.error(
                 f"Error al actualizar posición en {symbol}: {e}",
