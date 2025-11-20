@@ -405,6 +405,37 @@ class MT5Connector:
         return account
     
     @require_connection
+    def get_positions(self, symbol: Optional[str] = None) -> Any:
+        """
+        Obtiene posiciones abiertas de la cuenta.
+        
+        Args:
+            symbol: Símbolo específico (opcional). Si es None, retorna todas las posiciones.
+        
+        Returns:
+            Lista de posiciones abiertas
+        
+        Raises:
+            MT5ConnectionError: Si no hay conexión activa
+        
+        Example:
+            >>> # Todas las posiciones
+            >>> positions = connector.get_positions()
+            >>> 
+            >>> # Solo EURUSD
+            >>> positions = connector.get_positions("EURUSD")
+        """
+        if symbol:
+            positions = self._mt5.positions_get(symbol=symbol)
+        else:
+            positions = self._mt5.positions_get()
+        
+        if positions is None:
+            return []
+        
+        return positions
+    
+    @require_connection
     def get_symbol_info(self, symbol: str) -> Any:
         """
         Obtiene información completa de un símbolo.

@@ -1,5 +1,19 @@
 {
     "sessions": {
+        "test_session": {
+            "start": "00:00",
+            "end": "23:59",
+            "symbols": [
+                "EURUSD",
+                "GBPUSD"
+            ],
+            "strategies": [
+                "A_tendencia",
+                "B_rango",
+                "C_breakout"
+            ],
+            "risk_level": "medio"
+        },
         "londres": {
             "start": "02:00",
             "end": "05:00",
@@ -21,7 +35,8 @@
                 "EURUSD",
                 "GBPUSD",
                 "USDCAD",
-                "USDCHF"
+                "USDCHF",
+                "XAUUSD"
             ],
             "strategies": [
                 "A_tendencia",
@@ -55,7 +70,8 @@
             "symbols": [
                 "USDJPY",
                 "AUDUSD",
-                "NZDUSD"
+                "NZDUSD",
+                "AUDJPY"
             ],
             "strategies": [
                 "B_rango"

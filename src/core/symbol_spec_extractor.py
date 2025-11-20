@@ -159,6 +159,18 @@ class SymbolSpecificationExtractor:
                 raise SymbolSpecificationError(
                     f"No symbol info returned from MT5 for '{symbol}'"
                 )
+            
+            # Log detallado de la información del símbolo para debugging
+            self.logger.info(
+                f"Symbol info for {symbol}: "
+                f"point={getattr(symbol_info, 'point', 'MISSING')}, "
+                f"tick_size={getattr(symbol_info, 'tick_size', 'MISSING')}, "
+                f"tick_value={getattr(symbol_info, 'tick_value', 'MISSING')}, "
+                f"volume_min={getattr(symbol_info, 'volume_min', 'MISSING')}, "
+                f"volume_max={getattr(symbol_info, 'volume_max', 'MISSING')}, "
+                f"volume_step={getattr(symbol_info, 'volume_step', 'MISSING')}, "
+                f"contract_size={getattr(symbol_info, 'contract_size', 'MISSING')}"
+            )
         
         except ValueError as e:
             # MT5Connector lanza ValueError si el símbolo no existe
@@ -170,19 +182,19 @@ class SymbolSpecificationExtractor:
             )
         
         # Validar datos antes de crear la especificación
-        self._validate_symbol_info(symbol_info)
+        validated_values = self._validate_symbol_info(symbol, symbol_info)
         
-        # Convertir a SymbolSpecification
+        # Convertir a SymbolSpecification usando valores validados
         try:
             spec = PositionSizerSpec(
                 symbol=symbol,
                 point=symbol_info.point,
-                tick_size=symbol_info.tick_size,
-                tick_value=symbol_info.tick_value,
+                tick_size=validated_values['tick_size'],
+                tick_value=validated_values['tick_value'],
                 volume_min=symbol_info.volume_min,
                 volume_max=symbol_info.volume_max,
                 volume_step=symbol_info.volume_step,
-                contract_size=symbol_info.contract_size
+                contract_size=validated_values['contract_size']
             )
             
             # Guardar en caché
@@ -240,12 +252,16 @@ class SymbolSpecificationExtractor:
             volume_step=full_spec.volume_step
         )
     
-    def _validate_symbol_info(self, symbol_info) -> None:
+    def _validate_symbol_info(self, symbol: str, symbol_info) -> Dict[str, float]:
         """
         Validar que la información del símbolo sea válida.
         
         Args:
+            symbol: Nombre del símbolo (para logging)
             symbol_info: Información del símbolo de MT5
+        
+        Returns:
+            Dict con valores validados/calculados: tick_size, tick_value
         
         Raises:
             InvalidSymbolDataError: Si los datos son inválidos
@@ -256,16 +272,45 @@ class SymbolSpecificationExtractor:
                 f"Invalid point value: {getattr(symbol_info, 'point', None)}"
             )
         
-        # Validar tick_size
-        if not hasattr(symbol_info, 'tick_size') or symbol_info.tick_size <= 0:
-            raise InvalidSymbolDataError(
-                f"Invalid tick_size: {getattr(symbol_info, 'tick_size', None)}"
-            )
+        # Validar y corregir tick_size si es necesario
+        tick_size_value = getattr(symbol_info, 'tick_size', None)
+        point_value = getattr(symbol_info, 'point', None)
+        
+        if tick_size_value is None or tick_size_value <= 0:
+            # Para símbolos forex, tick_size generalmente es igual a point
+            if point_value is not None and point_value > 0:
+                tick_size_value = point_value
+                self.logger.warning(f"tick_size was None for {symbol}, using point value: {tick_size_value}")
+            else:
+                # Ambos son None - esto es un problema grave
+                self.logger.error(
+                    f"CRITICAL: Both tick_size and point are None for {symbol}. "
+                    f"MT5 connection may be invalid or symbol data corrupted. "
+                    f"Raw symbol_info: {symbol_info}"
+                )
+                raise InvalidSymbolDataError(
+                    f"Invalid tick_size: None and point: None for symbol {symbol}. "
+                    f"MT5 may not be connected properly or symbol data is corrupted."
+                )
+        
+        # Validar contract_size primero (lo necesitamos para tick_value)
+        contract_size_val = getattr(symbol_info, 'contract_size', None)
+        if contract_size_val is None or contract_size_val <= 0:
+            self.logger.warning(f"contract_size was None for {symbol}, using default forex value: 100000")
+            contract_size_val = 100000  # Default forex
         
         # Validar tick_value
-        if not hasattr(symbol_info, 'tick_value') or symbol_info.tick_value <= 0:
+        tick_value_val = getattr(symbol_info, 'tick_value', None)
+        if tick_value_val is None or tick_value_val <= 0:
+            # Calcular tick_value usando contract_size (ya validado arriba)
+            # Para forex, tick_value ≈ contract_size * tick_size
+            tick_value_val = contract_size_val * tick_size_value
+            self.logger.warning(f"tick_value was None for {symbol}, calculated as: {tick_value_val}")
+        
+        # Validar tick_value final
+        if tick_value_val is None or tick_value_val <= 0:
             raise InvalidSymbolDataError(
-                f"Invalid tick_value: {getattr(symbol_info, 'tick_value', None)}"
+                f"Invalid tick_value: {tick_value_val}"
             )
         
         # Validar volume_min
@@ -286,11 +331,12 @@ class SymbolSpecificationExtractor:
                 f"Invalid volume_step: {getattr(symbol_info, 'volume_step', None)}"
             )
         
-        # Validar contract_size
-        if not hasattr(symbol_info, 'contract_size') or symbol_info.contract_size <= 0:
-            raise InvalidSymbolDataError(
-                f"Invalid contract_size: {getattr(symbol_info, 'contract_size', None)}"
-            )
+        # Retornar valores validados
+        return {
+            'tick_size': tick_size_value,
+            'tick_value': tick_value_val,
+            'contract_size': contract_size_val
+        }
         
         # Validar relación min/max
         if symbol_info.volume_min > symbol_info.volume_max:

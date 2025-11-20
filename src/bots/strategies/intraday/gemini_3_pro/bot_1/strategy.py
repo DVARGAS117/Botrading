@@ -10,7 +10,7 @@ aprovechar movimientos de precio en marcos temporales cortos (M1, M5, M15, H1).
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Tuple
 
 from src.bots.base.base_bot_operations import BaseBotOperations, BotConfig
 from src.bots.strategies.intraday.gemini_3_pro.bot_1.intraday_indicators import (
@@ -75,9 +75,32 @@ class IntradayBot1Strategy(BaseBotOperations):
         # self.vertex_client = VertexAIClient(config=vertex_config)
         self.vertex_client = None  # Se inicializará en initialize()
         
-        # Position manager se inicializará lazily cuando se necesite
-        # (porque mt5_connection solo está disponible después de initialize())
+        # Inicializar _position_manager (lazy loading)
         self._position_manager = None
+        
+        # Configurar logger específico del bot con directorio propio
+        from src.core.logger import LogConfig, LogLevel
+        
+        bot_dir = Path(__file__).parent
+        log_dir = bot_dir / "logs"
+        
+        # Convertir log_level string a LogLevel enum
+        try:
+            level_enum = LogLevel[self.config.log_level.upper()]
+        except KeyError:
+            level_enum = LogLevel.INFO  # Default fallback
+        
+        log_config = LogConfig(
+            level=level_enum,
+            log_dir=str(log_dir),
+            log_to_console=True,
+            log_to_file=True,
+            format_json=False
+        )
+        
+        # Reemplazar el logger de la clase base
+        from src.core.logger import get_bot_logger
+        self.logger = get_bot_logger(f"Bot{self.config.bot_id}_{self.config.bot_name}", log_config)
         
         # Ruta a los prompts (usar config/prompt_templates/)
         # Subir 6 niveles desde strategy.py hasta raíz del proyecto
@@ -127,6 +150,260 @@ class IntradayBot1Strategy(BaseBotOperations):
         
         return True
     
+    def run_trading_cycle(self) -> None:
+        """
+        Sobrescribe el ciclo de trading base para usar execute_cycle específico de INTRADAY.
+        
+        Este método verifica las condiciones base (horario, límites) y luego
+        delega la ejecución específica del ciclo INTRADAY a execute_cycle.
+        """
+        if not self.is_initialized:
+            self.logger.error("Bot no inicializado. Ejecuta initialize() primero.")
+            return
+        
+        # 1. Verificar horario
+        if not self.is_trading_hours():
+            self.logger.info("Fuera de horario de trading. Esperando...")
+            return
+        
+        # 2. Verificar límites diarios
+        if self.should_stop_trading_today():
+            self.logger.warning("Trading detenido por límites diarios alcanzados")
+            return
+        
+        # 3. Obtener símbolos activos en la sesión actual
+        active_symbols = self._get_active_symbols_for_trading()
+        
+        if not active_symbols:
+            session_info = self.session_manager.get_current_session() if self.session_manager else {}
+            session_name = session_info.get('name', 'desconocida')
+            self.logger.info(
+                f"⏸️  No hay símbolos permitidos en la sesión actual ({session_name})",
+                extra={'session': session_name, 'time': datetime.now().strftime('%H:%M')}
+            )
+            return
+        
+        self.logger.info(
+            f"✅ Símbolos activos para operar: {', '.join(active_symbols)}",
+            extra={'symbols': active_symbols, 'count': len(active_symbols)}
+        )
+        
+        # 4. Ejecutar ciclo INTRADAY para cada símbolo activo
+        for symbol in active_symbols:
+            try:
+                self.logger.info(f"📊 Procesando {symbol}...")
+                
+                # Ejecutar ciclo INTRADAY específico (prepara datos, consulta IA, ejecuta decisión)
+                decision = self.execute_cycle(symbol)
+                
+                # Ejecutar la decisión tomada por la IA
+                self._execute_decision(symbol, decision)
+                
+                # Actualizar métricas de rendimiento
+                self._update_performance_metrics(symbol, decision)
+                
+            except Exception as e:
+                self.logger.error(
+                    f"Error procesando {symbol}: {str(e)}",
+                    extra={'symbol': symbol, 'error': str(e)}
+                )
+                continue
+
+    def prepare_data_for_ai(
+        self,
+        symbol: str,
+        indicators: Dict,
+        or_data: Optional[Any],
+        market_context: MarketContext,
+        ohlcv_data: Optional[Dict] = None,
+    ) -> Tuple[str, str]:
+        """
+        Sobrescribe método base para retornar tupla (system_prompt, user_prompt).
+        
+        El método base espera una tupla de dos strings, pero la implementación
+        INTRADAY necesita más datos. Este método extrae solo los prompts
+        del diccionario completo retornado por _prepare_intraday_data_for_ai.
+        
+        Args:
+            symbol: Símbolo a analizar (ej: "EURUSD")
+            indicators: Diccionario con valores de indicadores técnicos (NO USADO)
+            or_data: Datos del Opening Range (opcional, NO USADO en INTRADAY)
+            market_context: Contexto de mercado actual
+            ohlcv_data: Datos OHLCV históricos (opcional, NO USADO)
+            
+        Returns:
+            Tupla (system_prompt, user_prompt) para compatibilidad con código base
+        """
+        # Obtener datos completos INTRADAY
+        intraday_data = self._prepare_intraday_data_for_ai(
+            symbol=symbol,
+            indicators=indicators,
+            or_data=or_data,
+            market_context=market_context,
+            ohlcv_data=ohlcv_data
+        )
+        
+        # Retornar solo los prompts como tupla para compatibilidad
+        return intraday_data["system_prompt"], intraday_data["user_prompt"]
+
+    def _prepare_intraday_data_for_ai(
+        self,
+        symbol: str,
+        indicators: Dict,
+        or_data: Optional[Any],
+        market_context: MarketContext,
+        ohlcv_data: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
+        """
+        Método interno que prepara datos completos INTRADAY para la IA.
+        
+        Este método contiene la lógica completa de preparación de datos
+        específica de INTRADAY, retornando un diccionario con toda la
+        información necesaria.
+        
+        Args:
+            symbol: Símbolo a analizar (ej: "EURUSD")
+            indicators: Diccionario con valores de indicadores técnicos (NO USADO)
+            or_data: Datos del Opening Range (opcional, NO USADO en INTRADAY)
+            market_context: Contexto de mercado actual
+            ohlcv_data: Datos OHLCV históricos (opcional, NO USADO)
+            
+        Returns:
+            Diccionario con toda la información INTRADAY
+        """
+        # 1. Generar operation_id único
+        operation_id = generate_operation_id(self.config.bot_id, symbol)
+        
+        # 2. Calcular paquetes de indicadores
+        self.logger.info(
+            f"Calculando paquetes INTRADAY para {symbol}",
+            extra={
+                "symbol": symbol,
+                "operation_id": operation_id,
+                "bot_id": self.config.bot_id,
+            },
+        )
+        
+        try:
+            packages = self.indicator_calculator.get_full_intraday_packages(symbol)
+            tactical_package = packages["tactical_m15"]
+            strategic_package = packages["strategic_d1"]
+        except Exception as e:
+            self.logger.error(
+                f"Error calculando paquetes INTRADAY para {symbol}: {e}",
+                extra={
+                    "symbol": symbol,
+                    "operation_id": operation_id,
+                    "error": str(e),
+                },
+            )
+            raise
+        
+        # 3. Cargar prompts desde archivos
+        system_prompt_path = self.prompts_dir / "intraday_gemini_3_pro_bot_1_system.txt"
+        user_prompt_path = self.prompts_dir / "intraday_gemini_3_pro_bot_1_user.txt"
+        
+        # Determinar si hay operación activa
+        has_active_position = self._has_active_position(symbol)
+        
+        try:
+            with open(system_prompt_path, "r", encoding="utf-8") as f:
+                system_prompt = f.read()
+            
+            with open(user_prompt_path, "r", encoding="utf-8") as f:
+                user_prompt_template = f.read()
+        except FileNotFoundError as e:
+            self.logger.error(
+                f"Error: No se encontró archivo de prompt: {e.filename}",
+                extra={
+                    "symbol": symbol,
+                    "operation_id": operation_id,
+                    "missing_file": e.filename,
+                },
+            )
+            raise
+        
+        # 4. Reemplazar variables en user_prompt
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        user_prompt = user_prompt_template.replace("{symbol}", symbol)
+        user_prompt = user_prompt.replace("{operation_id}", operation_id)
+        user_prompt = user_prompt.replace("{current_time}", current_time)
+        user_prompt = user_prompt.replace(
+            "{tactical_package}", json.dumps(tactical_package, indent=2)
+        )
+        user_prompt = user_prompt.replace(
+            "{strategic_package}", json.dumps(strategic_package, indent=2)
+        )
+        
+        # Construir información de posición
+        if has_active_position:
+            current_position = self._get_current_position_info(symbol)
+            
+            # Obtener SL inicial desde BD
+            sl_inicial = self._get_initial_sl_from_db(symbol)
+            if sl_inicial is None:
+                sl_inicial = current_position['sl']
+            
+            # Calcular riesgo inicial (R) con SL inicial
+            pip_value = 0.01 if "JPY" in symbol else 0.0001
+            risk_points = abs(current_position['price_open'] - sl_inicial)
+            risk_pips = risk_points / pip_value
+            
+            # Calcular PnL en R basado en SL inicial
+            if current_position['type'] == "LONG":
+                pnl_points = current_position['price_current'] - current_position['price_open']
+            else:
+                pnl_points = current_position['price_open'] - current_position['price_current']
+            pnl_r = pnl_points / risk_points if risk_points > 0 else 0.0
+            
+            # Determinar si SL fue ajustado
+            sl_ajustado_nota = ""
+            if abs(current_position['sl'] - sl_inicial) > pip_value * 0.1:
+                sl_ajustado_nota = f" (⚠️ SL inicial: {sl_inicial}, ajustado a: {current_position['sl']})"
+            
+            position_text = f"""POSICIÓN ACTIVA: {current_position['type']} @ {current_position['price_open']}
+- Volumen: {current_position['volume']} lotes
+- PnL Actual: ${current_position['profit']:.2f} USD ({current_position['pnl_pips']:.1f} pips = {pnl_r:.2f}R)
+- Stop Loss Actual: {current_position['sl']}{sl_ajustado_nota}
+- Take Profit: {current_position['tp']}
+- Precio Actual: {current_position['price_current']}
+- Duración: {current_position.get('duration', 'N/A')}
+- Riesgo Inicial (1R): {risk_pips:.1f} pips (basado en SL inicial: {sl_inicial})
+
+⚠️ PRIORIDAD: Gestiona esta posición. Evalúa si debe CERRARSE, AJUSTAR_SL_TP o MANTENERSE."""
+        else:
+            position_text = """POSICIÓN ACTUAL: NONE (Sin posición abierta)
+
+✅ Puedes evaluar nuevas oportunidades de entrada (COMPRAR/VENDER) si hay setup válido."""
+        
+        user_prompt = user_prompt.replace("{current_position}", position_text)
+        
+        # 5. Retornar diccionario completo
+        self.logger.info(
+            f"Datos INTRADAY preparados para {symbol}",
+            extra={
+                "symbol": symbol,
+                "operation_id": operation_id,
+                "has_active_position": has_active_position,
+                "system_prompt_length": len(system_prompt),
+                "user_prompt_length": len(user_prompt),
+                "tactical_candles": len(tactical_package),
+                "strategic_candles": len(strategic_package),
+            },
+        )
+        
+        return {
+            "operation_id": operation_id,
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
+            "tactical_package": tactical_package,
+            "strategic_package": strategic_package,
+            "symbol": symbol,
+            "timestamp": current_time,
+            "has_active_position": has_active_position,
+        }
+
     @property
     def position_manager(self) -> PositionManager:
         """Property lazy para position_manager.
@@ -347,7 +624,7 @@ class IntradayBot1Strategy(BaseBotOperations):
         
         # 1. Preparar datos para IA
         try:
-            prepared_data = self.prepare_data_for_ai(
+            prepared_data = self._prepare_intraday_data_for_ai(
                 symbol=symbol,
                 indicators={},  # No usado, calculamos propios
                 or_data=None,
@@ -382,53 +659,73 @@ class IntradayBot1Strategy(BaseBotOperations):
         # Construir prompt completo para Gemini
         full_prompt = f"{system_prompt}\n\n{user_prompt}"
         
-        # Llamar a Vertex AI (Gemini 3 Pro)
-        try:
-            gemini_response = self.vertex_client.send_prompt(full_prompt)
+        # Guardar prompt si está habilitado (antes de consultar a Gemini)
+        if self.config.save_prompts:
+            self._save_prompt_to_file(system_prompt, user_prompt, full_prompt, symbol, 1)
+            self.logger.info("✅ Modo validación: Prompt generado sin consultar a Gemini (--save-prompts activo)")
+            # Retornar respuesta simulada sin consultar a Gemini (ahorra tokens)
+            from src.core.gemini_client import GeminiResponse
+            dummy = GeminiResponse(success=True, content="[PROMPT_ONLY_MODE]", tokens_input=0, tokens_output=0, cost=0.0)
             
-            if not gemini_response.success:
-                self.logger.error(
-                    f"Error en respuesta de Gemini para {symbol}: {gemini_response.error_message}",
+            # Crear respuesta simulada con estructura esperada
+            ai_response = {
+                "response_text": "[PROMPT_ONLY_MODE]",
+                "tokens_input": 0,
+                "tokens_output": 0,
+                "cost_usd": 0.0,
+            }
+        else:
+            # Llamar a Vertex AI (Gemini 3 Pro)
+            try:
+                gemini_response = self.vertex_client.send_prompt(full_prompt)
+                
+                if not gemini_response.success:
+                    self.logger.error(
+                        f"Error en respuesta de Gemini para {symbol}: {gemini_response.error_message}",
+                        extra={
+                            "symbol": symbol,
+                            "operation_id": operation_id,
+                            "error_type": gemini_response.error_type,
+                        },
+                    )
+                    raise Exception(f"Gemini API error: {gemini_response.error_message}")
+                
+                ai_response = {
+                    "response_text": gemini_response.content,
+                    "tokens_input": gemini_response.tokens_input or 0,
+                    "tokens_output": gemini_response.tokens_output or 0,
+                    "cost_usd": gemini_response.cost or 0.0,
+                }
+                
+                self.logger.info(
+                    f"Respuesta de Gemini recibida para {symbol}",
                     extra={
                         "symbol": symbol,
                         "operation_id": operation_id,
-                        "error_type": gemini_response.error_type,
+                        "tokens_total": gemini_response.total_tokens,
+                        "cost_usd": ai_response["cost_usd"],
+                        "latency": gemini_response.latency,
                     },
                 )
-                raise Exception(f"Gemini API error: {gemini_response.error_message}")
-            
-            ai_response = {
-                "response_text": gemini_response.content,
-                "tokens_input": gemini_response.tokens_input or 0,
-                "tokens_output": gemini_response.tokens_output or 0,
-                "cost_usd": gemini_response.cost or 0.0,
-            }
-            
-            self.logger.info(
-                f"Respuesta de Gemini recibida para {symbol}",
-                extra={
-                    "symbol": symbol,
-                    "operation_id": operation_id,
-                    "tokens_total": gemini_response.total_tokens,
-                    "cost_usd": ai_response["cost_usd"],
-                    "latency": gemini_response.latency,
-                },
-            )
-            
-        except Exception as e:
-            self.logger.error(
-                f"Error consultando Gemini para {symbol}: {e}",
-                extra={
-                    "symbol": symbol,
-                    "operation_id": operation_id,
-                    "error": str(e),
-                },
-            )
-            raise
+                
+            except Exception as e:
+                self.logger.error(
+                    f"Error consultando Gemini para {symbol}: {e}",
+                    extra={
+                        "symbol": symbol,
+                        "operation_id": operation_id,
+                        "error": str(e),
+                    },
+                )
+                raise
         
         # 3. Parsear respuesta
         try:
-            parsed_decision = self.parse_ai_response(ai_response["response_text"])
+            # Log respuesta cruda antes de parsear
+            raw_response = ai_response["response_text"]
+            self.logger.info(f"Respuesta cruda de Gemini: {raw_response[:1000]}{'...' if len(raw_response) > 1000 else ''}")
+            
+            parsed_decision = self.parse_ai_response(raw_response)
         except Exception as e:
             self.logger.error(
                 f"Error parseando respuesta IA para {symbol}: {e}",
@@ -484,7 +781,7 @@ class IntradayBot1Strategy(BaseBotOperations):
         # 5. Retornar decisión completa
         return {
             "operation_id": operation_id,
-            "action": parsed_decision["accion"],
+            "accion": parsed_decision["accion"],  # Corregido: usar "accion" en lugar de "action"
             "reasoning": parsed_decision["razonamiento"],
             "direction": parsed_decision.get("direccion"),
             "stop_loss": parsed_decision.get("stop_loss"),
@@ -680,7 +977,16 @@ class IntradayBot1Strategy(BaseBotOperations):
             True si hay posición activa, False en caso contrario
         """
         try:
-            # Obtener posiciones del símbolo con el magic number del bot
+            # Verificar si position_manager está disponible (podría no estar inicializado aún)
+            if not hasattr(self, '_position_manager') or self._position_manager is None:
+                # Si no está inicializado, intentar inicializarlo
+                if hasattr(self, 'mt5_connection') and self.mt5_connection is not None:
+                    self._position_manager = PositionManager(self.mt5_connection)
+                else:
+                    # Si no hay conexión MT5, asumir que no hay posiciones
+                    return False
+            
+            # Usar la property position_manager para asegurar inicialización lazy
             positions = self.position_manager.get_positions_by_symbol_and_magic(
                 symbol=symbol,
                 magic=self.config.bot_id
@@ -860,12 +1166,12 @@ class IntradayBot1Strategy(BaseBotOperations):
             
             # 3. Registrar en base de datos con valores iniciales
             # Verificar si la orden se ejecutó (buscar posición recién abierta)
-            if not self._position_manager:
+            if not self.position_manager:
                 self.logger.warning("PositionManager no disponible, no se registrará en BD")
                 return
             
             # Buscar posición por símbolo (get_positions_by_symbol retorna lista)
-            positions = self._position_manager.get_positions_by_symbol(symbol)
+            positions = self.position_manager.get_positions_by_symbol(symbol)
             
             if not positions:
                 self.logger.warning(
@@ -890,33 +1196,48 @@ class IntradayBot1Strategy(BaseBotOperations):
                 symbol=symbol
             )
             
+            # Usar precio real de ejecución para todos los cálculos
+            actual_price = float(position.price_open)
+            
+            # Recalcular SL/TP basado en precio real de ejecución (más preciso)
+            # Para BUY: SL por debajo, TP por encima
+            # Para SELL: SL por encima, TP por debajo
+            if direction == "buy":
+                # SL: precio_real - riesgo, TP: precio_real + objetivo
+                actual_sl = actual_price - (200 * 0.00001)  # 200 pips de riesgo
+                actual_tp = actual_price + (400 * 0.00001)  # 400 pips de objetivo
+            else:
+                # SL: precio_real + riesgo, TP: precio_real - objetivo
+                actual_sl = actual_price + (200 * 0.00001)
+                actual_tp = actual_price - (400 * 0.00001)
+            
             self.logger.info(
                 f"Registrando operación en BD: {operation_id}",
                 extra={
                     "symbol": symbol,
                     "direction": db_direction.value,
-                    "entry_price": position.price_open,
-                    "stop_loss": stop_loss,
-                    "take_profit": take_profit,
-                    "stop_loss_initial": stop_loss,  # Guardar SL inicial
-                    "take_profit_initial": take_profit,  # Guardar TP inicial
+                    "execution_price": actual_price,
+                    "calculated_sl": actual_sl,
+                    "calculated_tp": actual_tp,
+                    "stop_loss_initial": actual_sl,  # Guardar SL calculado con precio real
+                    "take_profit_initial": actual_tp,  # Guardar TP calculado con precio real
                 }
             )
             
-            # Crear operación en BD
+            # Crear operación en BD con valores recalculados
             operation = self.operations_repo.create_operation(
-                magic_number=position.ticket,
+                magic_number=position.magic,  # ✅ Usar magic number, no ticket
                 bot_id=self.config.bot_id,
                 ia_id=1,  # Usar 1 como default (ia_config_id no está en BotConfig)
                 order_type=DBOrderType.MARKET,
                 symbol=symbol,
                 direction=db_direction,
-                suggested_price=float(entry_price or position.price_open),
-                actual_entry_price=float(position.price_open),
-                stop_loss=float(stop_loss),
-                take_profit=float(take_profit),
-                stop_loss_initial=float(stop_loss),  # 🔑 Valor inicial de SL
-                take_profit_initial=float(take_profit),  # 🔑 Valor inicial de TP
+                suggested_price=float(entry_price or actual_price),  # Precio sugerido (tick)
+                actual_entry_price=actual_price,  # Precio real de ejecución
+                stop_loss=actual_sl,  # SL recalculado con precio real
+                take_profit=actual_tp,  # TP recalculado con precio real
+                stop_loss_initial=actual_sl,  # 🔑 Valor inicial de SL (con precio real)
+                take_profit_initial=actual_tp,  # 🔑 Valor inicial de TP (con precio real)
                 lot_size=lot_size,
                 risk_percentage=risk_pct,
                 status=OperationStatus.OPEN,
@@ -957,11 +1278,11 @@ class IntradayBot1Strategy(BaseBotOperations):
         # 2. Actualizar registro en BD
         try:
             # Obtener posición de MT5
-            if not self._position_manager:
+            if not self.position_manager:
                 self.logger.warning("PositionManager no disponible, no se actualizará BD")
                 return
             
-            positions = self._position_manager.get_positions_by_symbol(symbol)
+            positions = self.position_manager.get_positions_by_symbol(symbol)
             if not positions:
                 self.logger.warning(f"No se encontró posición para {symbol}, no se actualizará BD")
                 return
@@ -1031,4 +1352,20 @@ class IntradayBot1Strategy(BaseBotOperations):
                 f"Error al actualizar operación en BD para {symbol}: {e}",
                 extra={"symbol": symbol, "error": str(e)}
             )
+    
+    def _update_performance_metrics(self, symbol: str, decision: Dict[str, Any]) -> None:
+        """
+        Actualiza las métricas de rendimiento del bot basadas en la decisión.
+        
+        Args:
+            symbol: Símbolo procesado
+            decision: Decisión tomada por la IA
+        """
+        # Actualizar trades_today si se abrió una posición
+        if decision.get("accion") in ["COMPRAR", "VENDER"]:
+            self.trades_today += 1
+        
+        # Aquí se podrían actualizar otras métricas como current_pnl_r
+        # basado en las posiciones abiertas, pero por simplicidad
+        # se deja para implementación futura
 

@@ -100,8 +100,10 @@ class BotConfig:
     
     def __post_init__(self):
         """Validar configuración"""
-        if self.bot_id not in [1, 2, 3, 4, 5]:
-            raise ValueError(f"bot_id debe estar entre 1 y 5, recibido: {self.bot_id}")
+        # Aceptar bot_id de 1-5 (legacy) o 101-105 (nuevos IDs de 3 dígitos)
+        valid_ids = [1, 2, 3, 4, 5, 101, 102, 103, 104, 105]
+        if self.bot_id not in valid_ids:
+            raise ValueError(f"bot_id debe ser uno de {valid_ids}, recibido: {self.bot_id}")
         
         if self.bot_type not in ["numerico", "visual", "hibrido"]:
             raise ValueError(f"bot_type inválido: {self.bot_type}")
@@ -795,6 +797,72 @@ class BaseBotOperations(ABC):
             )
             return None
     
+    def _save_prompt_to_file(self, system_prompt: str, user_prompt: str, combined_prompt: str, symbol: str, attempt: int = 1) -> None:
+        """
+        Guarda el prompt completo en un archivo para validación.
+        
+        Args:
+            system_prompt: System prompt
+            user_prompt: User prompt  
+            combined_prompt: Prompt combinado que se envía a la IA
+            symbol: Símbolo para el cual se genera el prompt
+            attempt: Número de intento (para reintentos)
+        """
+        try:
+            from datetime import datetime
+            from pathlib import Path
+            
+            # Crear carpeta de prompts dentro del directorio del bot
+            # Estructura: src/bots/bot_X/prompts/YYYYMMDD/
+            bot_dir = Path(__file__).parent.parent / f"bot_{self.config.bot_id}"
+            prompts_dir = bot_dir / "prompts" / datetime.now().strftime("%Y%m%d")
+            prompts_dir.mkdir(parents=True, exist_ok=True)
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = prompts_dir / f"prompt_{timestamp}_{symbol}_attempt_{attempt}.txt"
+            
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write("=" * 80 + "\n")
+                f.write("PROMPT ENVIADO A GEMINI 3 PRO - MODO VALIDACIÓN\n")
+                f.write("=" * 80 + "\n\n")
+                
+                f.write("METADATA:\n")
+                f.write(f"  Timestamp: {datetime.now().isoformat()}\n")
+                f.write(f"  Bot: {self.config.bot_name} (ID: {self.config.bot_id})\n")
+                f.write(f"  Símbolo: {symbol}\n")
+                f.write(f"  Modo: {self.config.mode.value}\n")
+                f.write(f"  Intento: {attempt}\n")
+                f.write(f"  Archivo: {filename}\n\n")
+                
+                f.write("=" * 80 + "\n")
+                f.write("SYSTEM PROMPT\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(system_prompt or "None")
+                f.write("\n\n")
+                
+                f.write("=" * 80 + "\n")
+                f.write("USER PROMPT\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(user_prompt)
+                f.write("\n\n")
+                
+                f.write("=" * 80 + "\n")
+                f.write("PROMPT COMPLETO ENVIADO A GEMINI\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(combined_prompt)
+                f.write("\n\n")
+                
+                f.write("=" * 80 + "\n")
+                f.write("FIN DEL ARCHIVO\n")
+                f.write("=" * 80 + "\n")
+            
+            self.logger.info(f"💾 Prompt guardado en: {filename}")
+            self.logger.info(f"📄 Contenido: System prompt ({len(system_prompt or '')} chars), User prompt ({len(user_prompt)} chars), Combined ({len(combined_prompt)} chars)")
+            
+        except Exception as e:
+            self.logger.error(f"No se pudo guardar prompt: {e}")
+            raise
+    
     def _query_ai(self, system_prompt: str, user_prompt: str, max_retries: int = 3) -> Tuple[Optional[Any], str]:
         """
         Consulta a la IA con retry automático.
@@ -814,42 +882,13 @@ class BaseBotOperations(ABC):
                 
                 # Guardar prompt si está habilitado
                 if self.config.save_prompts:
-                    from datetime import datetime
-                    from pathlib import Path
-                    
-                    # Crear carpeta de prompts dentro del directorio del bot
-                    # Estructura: src/bots/bot_X/prompts/YYYYMMDD/
-                    bot_dir = Path(__file__).parent.parent / f"bot_{self.config.bot_id}"
-                    prompts_dir = bot_dir / "prompts" / datetime.now().strftime("%Y%m%d")
-                    prompts_dir.mkdir(parents=True, exist_ok=True)
-                    
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    symbol = self.config.symbols[0] if self.config.symbols else 'unknown'
-                    filename = prompts_dir / f"prompt_{timestamp}_{symbol}.txt"
-                    
-                    try:
-                        with open(filename, 'w', encoding='utf-8') as f:
-                            f.write(f"=== PROMPT ENVIADO A IA ===\n")
-                            f.write(f"Timestamp: {datetime.now().isoformat()}\n")
-                            f.write(f"Bot: {self.config.bot_name} (ID: {self.config.bot_id})\n")
-                            f.write(f"Símbolo: {symbol}\n")
-                            f.write(f"Modo: {self.config.mode.value}\n")
-                            f.write(f"Intento: {attempt}\n\n")
-                            f.write("=== SYSTEM PROMPT ===\n")
-                            f.write(system_prompt or "None")
-                            f.write("\n\n=== USER PROMPT ===\n")
-                            f.write(user_prompt)
-                            f.write("\n\n=== COMBINED PROMPT ===\n")
-                            f.write(combined_prompt)
-                        self.logger.info(f"💾 Prompt guardado en: {filename}")
-                        self.logger.info("✅ Modo validación: Prompt generado sin consultar a Gemini (--save-prompts activo)")
-                        # Retornar respuesta simulada sin consultar a Gemini (ahorra tokens)
-                        from src.core.gemini_client import GeminiResponse
-                        dummy = GeminiResponse(success=True, content="[PROMPT_ONLY_MODE]", tokens_input=0, tokens_output=0, cost=0.0)
-                        return dummy, combined_prompt
-                    except Exception as e:
-                        self.logger.warning(f"No se pudo guardar prompt: {e}")
-                        return None
+                    self._save_prompt_to_file(system_prompt, user_prompt, combined_prompt, 
+                                            self.config.symbols[0] if self.config.symbols else 'unknown', attempt)
+                    self.logger.info("✅ Modo validación: Prompt generado sin consultar a Gemini (--save-prompts activo)")
+                    # Retornar respuesta simulada sin consultar a Gemini (ahorra tokens)
+                    from src.core.gemini_client import GeminiResponse
+                    dummy = GeminiResponse(success=True, content="[PROMPT_ONLY_MODE]", tokens_input=0, tokens_output=0, cost=0.0)
+                    return dummy, combined_prompt
                 
                 response_obj = self.ai_client.send_prompt(combined_prompt)
 
@@ -936,10 +975,29 @@ class BaseBotOperations(ABC):
             tick = self.mt5_connection._mt5.symbol_info_tick(symbol)
             if entry_price is None and tick is not None:
                 entry_price = tick.ask if direction == "buy" else tick.bid
+            
+            if entry_price is None:
+                self.logger.error(f"No se pudo determinar precio de entrada para {symbol}")
+                return
 
             # Balance de cuenta y especificaciones
             account = self.mt5_connection.get_account_info()
             balance = float(getattr(account, 'balance', 0.0))
+            
+            # Verificar que el símbolo esté disponible antes de obtener especificaciones
+            try:
+                symbol_info = self.mt5_connection.get_symbol_info(symbol)
+                if symbol_info is None:
+                    self.logger.error(f"Símbolo {symbol} no está disponible en MT5")
+                    return
+            except ValueError as e:
+                self.logger.error(f"Error obteniendo información del símbolo {symbol}: {e}")
+                return
+            
+            if self.symbol_spec_extractor is None:
+                self.logger.error("SymbolSpecificationExtractor no inicializado")
+                return
+            
             symbol_spec = self.symbol_spec_extractor.get_symbol_specification(symbol)
 
             risk_pct = float(self.config.risk_per_trade)
@@ -949,6 +1007,14 @@ class BaseBotOperations(ABC):
             use_dual = self.config.enable_dual_orders and self.dual_order_manager is not None and limit_price is not None
 
             if use_dual:
+                if self.dual_order_manager is None:
+                    self.logger.error("DualOrderManager no inicializado")
+                    return
+                
+                if limit_price is None:
+                    self.logger.error("Precio límite requerido para órdenes duales pero es None")
+                    return
+                    
                 req = DualOrderRequest(
                     symbol=symbol,
                     direction=direction,

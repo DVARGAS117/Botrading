@@ -1,8 +1,9 @@
 # Script para ejecutar el bot INTRADAY con configuración correcta
-# Uso: .\run_bot.ps1 [--single-cycle]
+# Uso: .\run_bot.ps1 [--single-cycle] [--save-prompts]
 
 param(
-    [switch]$SingleCycle
+    [switch]$SingleCycle,
+    [switch]$SavePrompts
 )
 
 Write-Host "🚀 Iniciando Bot INTRADAY..." -ForegroundColor Cyan
@@ -19,6 +20,9 @@ Get-ChildItem -Path . -Recurse -Directory -Filter __pycache__ -ErrorAction Silen
 $cmd = "python -m src.bots.strategies.intraday.gemini_3_pro.bot_1.main"
 if ($SingleCycle) {
     $cmd += " --single-cycle"
+}
+if ($SavePrompts) {
+    $cmd += " --save-prompts"
 }
 
 Write-Host "▶️  Ejecutando: $cmd" -ForegroundColor Green

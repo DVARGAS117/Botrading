@@ -257,6 +257,13 @@ class OperationsRepository:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
+                # ✅ Verificar si ya existe operación con este magic_number
+                cursor.execute("SELECT id FROM operations WHERE magic_number = ?", (magic_number,))
+                existing = cursor.fetchone()
+                if existing:
+                    self.logger.warning(f"Operación con magic_number {magic_number} ya existe (ID={existing[0]}). Retornando existente.")
+                    return self.get_operation_by_id(existing[0])
+                
                 cursor.execute("""
                     INSERT INTO operations (
                         magic_number, bot_id, ia_id, order_type, symbol, direction,

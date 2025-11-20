@@ -25,14 +25,14 @@ def get_bot_1_config(mode: BotMode = BotMode.DEMO) -> BotConfig:
         bot_name="INTRADAY Baseline",
         bot_type="numerico",  # Tipo numerico (análisis basado en indicadores)
         mode=mode,
-        symbols=["EURUSD"],
+        symbols=["EURUSD", "GBPUSD", "USDCAD", "USDCHF", "XAUUSD"],  # Cinco pares principales para zona de oro (NY+Londres overlap)
         timeframes=[
             Timeframe.M1,   # Para señales precisas de entrada
             Timeframe.M5,   # Para contexto táctico
             Timeframe.M15,  # Para contexto intermedio
             Timeframe.H1,   # Para tendencia general
         ],
-        trading_hours=("08:00", "16:00"),  # Horario personalizado INTRADAY
+        trading_hours=("00:00", "23:59"),  # Horario completo para sesiones dinámicas
         timezone_local="America/Lima",
         risk_per_trade=1.0,  # 1% de riesgo por operación (configuración INTRADAY)
         max_daily_risk=3.0,  # Máximo 3R de pérdida diaria
