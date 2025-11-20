@@ -783,7 +783,7 @@ class IntradayBot1Strategy(BaseBotOperations):
             "operation_id": operation_id,
             "accion": parsed_decision["accion"],  # Corregido: usar "accion" en lugar de "action"
             "reasoning": parsed_decision["razonamiento"],
-            "direction": parsed_decision.get("direccion"),
+            "direccion": parsed_decision.get("direccion"),
             "stop_loss": parsed_decision.get("stop_loss"),
             "take_profit": parsed_decision.get("take_profit"),
             "confidence": parsed_decision.get("confianza"),
@@ -987,9 +987,19 @@ class IntradayBot1Strategy(BaseBotOperations):
                     return False
             
             # Usar la property position_manager para asegurar inicialización lazy
+            # Generar magic number estructurado para búsqueda
+            magic_to_use = self.config.bot_id
+            if self.magic_number_generator:
+                magic_to_use = self.magic_number_generator.generate(
+                    bot_id=self.config.bot_id,
+                    ia_config_id=0,
+                    order_type="market",
+                    sequence=0
+                )
+            
             positions = self.position_manager.get_positions_by_symbol_and_magic(
                 symbol=symbol,
-                magic=self.config.bot_id
+                magic=magic_to_use
             )
             
             has_position = len(positions) > 0
@@ -1146,11 +1156,19 @@ class IntradayBot1Strategy(BaseBotOperations):
         )
         
         try:
-            # 1. Extraer parámetros de la decisión
-            direction = decision.get("direccion", "").lower()
+            # 1. Extraer y normalizar parámetros de la decisión
+            direccion_raw = decision.get("direccion", "").lower()
             stop_loss = decision.get("stop_loss")
             take_profit = decision.get("take_profit") or decision.get("take_profit_1")
             entry_price = decision.get("precio_entrada")
+            
+            # Normalizar dirección: "LONG" -> "buy", "SHORT" -> "sell"
+            if direccion_raw in ("long", "comprar"):
+                direction = "buy"
+            elif direccion_raw in ("short", "vender"):
+                direction = "sell"
+            else:
+                direction = direccion_raw  # Ya está en formato correcto (buy/sell)
             
             if not stop_loss or not take_profit:
                 self.logger.warning("Decisión sin SL/TP válidos; no se abrirá operación")
@@ -1161,8 +1179,12 @@ class IntradayBot1Strategy(BaseBotOperations):
             if entry_price is None and tick is not None:
                 entry_price = tick.ask if direction == "buy" else tick.bid
             
-            # 2. Ejecutar orden a través del método base (enviará a MT5)
-            super()._execute_open_position(symbol, decision)
+            # 2. Crear nueva decisión con dirección normalizada para el método base
+            normalized_decision = decision.copy()
+            normalized_decision["direccion"] = direction  # "buy" o "sell"
+            
+            # 3. Ejecutar orden a través del método base (enviará a MT5)
+            super()._execute_open_position(symbol, normalized_decision)
             
             # 3. Registrar en base de datos con valores iniciales
             # Verificar si la orden se ejecutó (buscar posición recién abierta)
