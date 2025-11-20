@@ -2,9 +2,11 @@
 Ejemplo de uso de IntradayIndicatorCalculator.
 
 Demuestra cómo generar los paquetes táctico y estratégico con indicadores
-pre-calculados correctamente para la estrategia INTRADAY.
+pre-calculados correctamente para la estrategia INTRADAY, incluyendo
+actualizaciones incrementales.
 """
 import json
+from datetime import datetime, timedelta
 from src.core.mt5_connector import create_connector_from_credentials
 from src.core.mt5_data_extractor import MT5DataExtractor
 from src.bots.strategies.intraday.gemini_3_pro.bot_1.intraday_indicators import (
@@ -124,5 +126,77 @@ def main():
     connector.disconnect()
 
 
+# ========== ACTUALIZACIÓN TÁCTICA INCREMENTAL ==========
+def example_tactical_update():
+    """Ejemplo de actualización táctica incremental."""
+    
+    print("\n" + "=" * 70)
+    print("EJEMPLO: Actualización Táctica Incremental")
+    print("=" * 70)
+    
+    # Conectar a MT5
+    print("\n1. Conectando a MetaTrader 5...")
+    connector = create_connector_from_credentials()
+    
+    if not connector.connect():
+        print("❌ Error: No se pudo conectar a MT5")
+        return
+    
+    print("✅ Conectado a MT5")
+    
+    # Crear extractor y calculador
+    data_extractor = MT5DataExtractor(connector)
+    calculator = IntradayIndicatorCalculator(data_extractor)
+    
+    symbol = "EURUSD"
+    
+    # Simular que pasaron 30 minutos desde la última consulta
+    print("\n2. Simulando actualización incremental...")
+    last_query_time = datetime.now() - timedelta(minutes=30)
+    current_time = datetime.now()
+    
+    print(f"\n   Última consulta: {last_query_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"   Consulta actual: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"   Intervalo: {(current_time - last_query_time).seconds / 60:.0f} minutos")
+    
+    # Obtener solo velas nuevas
+    print(f"\n3. Obteniendo solo velas nuevas de {symbol}...")
+    tactical_update = calculator.calculate_tactical_update(
+        symbol=symbol,
+        last_timestamp=last_query_time,
+        current_timestamp=current_time
+    )
+    
+    print(f"\n📈 Actualización Táctica:")
+    print(f"   - Velas nuevas: {len(tactical_update)}")
+    
+    if len(tactical_update) > 0:
+        print(f"\n   Velas incluidas en la actualización:")
+        for i, candle in enumerate(tactical_update, 1):
+            print(f"      {i}. {candle.timestamp}")
+            print(f"         Close: {candle.close:.5f}")
+            print(f"         EMA 200: {candle.ema_200:.5f if candle.ema_200 else 'N/A'}")
+            print(f"         RSI 14: {candle.rsi_14:.2f if candle.rsi_14 else 'N/A'}")
+    else:
+        print("   ⚠️  No hay velas nuevas cerradas desde la última consulta")
+    
+    print("\n4. USO EN PRODUCCIÓN:")
+    print("   # Consulta inicial")
+    print("   packages = calculator.get_full_intraday_packages(symbol='EURUSD')")
+    print("   # ... enviar a Gemini, registrar en IAQueryRepository ...")
+    print("\n   # Actualización periódica (cada 15 min)")
+    print("   last_query = ia_repo.get_queries_by_operation_id(op_id)[0]")
+    print("   update = calculator.calculate_tactical_update(")
+    print("       symbol='EURUSD',")
+    print("       last_timestamp=last_query.created_at")
+    print("   )")
+    print("   # ... enviar solo velas nuevas a Gemini ...")
+    
+    print("\n" + "=" * 70)
+    
+    connector.disconnect()
+
+
 if __name__ == "__main__":
     main()
+    example_tactical_update()
