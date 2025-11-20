@@ -42,8 +42,8 @@ def parse_arguments():
     parser.add_argument(
         "--interval",
         type=int,
-        default=300,
-        help="Intervalo entre ciclos en segundos (default: 300 = 5min)",
+        default=900,
+        help="Intervalo entre ciclos en segundos (default: 900 = 15min)",
     )
 
     parser.add_argument(

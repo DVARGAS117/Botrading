@@ -681,6 +681,50 @@ class BaseBotOperations(ABC):
                 )
                 continue
     
+    def run_continuous(self, interval_seconds: int = 300) -> None:
+        """
+        Ejecuta el bot en modo continuo con intervalo especificado.
+        
+        Args:
+            interval_seconds: Segundos entre cada ciclo de trading (default: 300 = 5min)
+        """
+        if not self.is_initialized:
+            self.logger.error("Bot no inicializado. Ejecuta initialize() primero.")
+            return
+        
+        import time
+        
+        self.logger.info(f"Iniciando modo continuo con intervalo de {interval_seconds}s")
+        
+        try:
+            while True:
+                cycle_start = time.time()
+                
+                # Ejecutar ciclo de trading
+                try:
+                    self.run_trading_cycle()
+                except Exception as e:
+                    self.logger.error(f"Error en ciclo de trading: {e}")
+                
+                # Calcular tiempo de espera
+                cycle_duration = time.time() - cycle_start
+                sleep_time = max(0, interval_seconds - cycle_duration)
+                
+                if sleep_time > 0:
+                    self.logger.debug(
+                        f"Esperando {sleep_time:.1f}s hasta próximo ciclo...",
+                        extra={'cycle_duration': cycle_duration, 'sleep_time': sleep_time}
+                    )
+                    time.sleep(sleep_time)
+                else:
+                    self.logger.warning(
+                        f"⚠️ Ciclo tardó {cycle_duration:.1f}s (>{interval_seconds}s configurados)"
+                    )
+        
+        except KeyboardInterrupt:
+            self.logger.info("Modo continuo interrumpido por usuario")
+            raise
+    
     def _calculate_all_indicators(self, symbol: str) -> Tuple[Dict, Dict]:
         """
         Extrae datos y calcula indicadores para todos los timeframes.
