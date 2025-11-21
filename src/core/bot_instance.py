@@ -97,8 +97,10 @@ class BotConfig:
             raise BotConfigurationError("bot_id es requerido")
         
         bot_id = config_dict["bot_id"]
-        if not isinstance(bot_id, int) or bot_id < 1 or bot_id > 5:
-            raise BotConfigurationError("bot_id debe estar entre 1 y 5")
+        # Aceptar bot_id de 1-5 (legacy) o 101-106 (nuevos IDs)
+        valid_ids = [1, 2, 3, 4, 5, 101, 102, 103, 104, 105, 106]
+        if not isinstance(bot_id, int) or bot_id not in valid_ids:
+            raise BotConfigurationError(f"bot_id debe ser uno de {valid_ids}")
         
         if "bot_name" not in config_dict:
             raise BotConfigurationError("bot_name es requerido")

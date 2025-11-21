@@ -305,11 +305,13 @@ class MagicNumberGenerator:
             bot_id: ID del bot a validar
         
         Raises:
-            InvalidBotIdError: Si bot_id no está entre 1 y 5
+            InvalidBotIdError: Si bot_id no es válido
         """
-        if not isinstance(bot_id, int) or not (1 <= bot_id <= 5):
+        # Aceptar bot_id de 1-5 (legacy) o 101-106 (nuevos IDs)
+        valid_ids = [1, 2, 3, 4, 5, 101, 102, 103, 104, 105, 106]
+        if not isinstance(bot_id, int) or bot_id not in valid_ids:
             raise InvalidBotIdError(
-                f"bot_id debe estar entre 1 y 5. Recibido: {bot_id}"
+                f"bot_id debe ser uno de {valid_ids}. Recibido: {bot_id}"
             )
     
     def _validate_ia_config_id(self, ia_config_id: int) -> None:

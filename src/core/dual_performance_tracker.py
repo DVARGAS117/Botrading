@@ -98,10 +98,11 @@ class PerformanceRecord:
                 f"recibido: '{self.activation_status}'"
             )
         
-        # Validar bot_id
-        if not isinstance(self.bot_id, int) or not (1 <= self.bot_id <= 5):
+        # Validar bot_id (aceptar 1-5 legacy o 101-106 nuevos)
+        valid_ids = [1, 2, 3, 4, 5, 101, 102, 103, 104, 105, 106]
+        if not isinstance(self.bot_id, int) or self.bot_id not in valid_ids:
             raise InvalidPerformanceDataError(
-                f"bot_id debe estar entre 1 y 5, recibido: {self.bot_id}"
+                f"bot_id debe ser uno de {valid_ids}, recibido: {self.bot_id}"
             )
         
         # Validar magic_number
