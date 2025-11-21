@@ -32,7 +32,7 @@ El **Bot INTRADAY Gemini 3 Pro** (Bot 1) es una estrategia de trading automatiza
 
 | Parámetro | Valor |
 |-----------|-------|
-| Bot ID | 101 |
+| Bot ID | 3 |
 | Estrategia | INTRADAY Baseline |
 | Tipo | Numérico |
 | Modelo IA | gemini-3-pro-preview |
@@ -40,6 +40,8 @@ El **Bot INTRADAY Gemini 3 Pro** (Bot 1) es una estrategia de trading automatiza
 | Max Tokens | 24,576 |
 | Temperatura | 0.7 |
 | Timeout | 120s |
+
+**NOTA**: Existe también un **Bot 4 - INTRADAY Gemini 2.5 Pro** con la misma estrategia pero usando el modelo `gemini-2.5-pro`. Ambos bots generan magic numbers únicos (Bot 3 → 300000, Bot 4 → 400000) para evitar colisiones.
 
 ---
 

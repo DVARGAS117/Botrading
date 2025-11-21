@@ -159,13 +159,13 @@ class MagicNumberGenerator:
         Genera un Magic Number único de 6 dígitos.
         
         Estructura: [Bot][IA][Tipo][Secuencia]
-        - Dígito 1: Bot ID (1-5)
+        - Dígito 1: Bot ID (1-5 o mapeado de 101-106)
         - Dígito 2: IA Config ID (0-9)
         - Dígito 3: Order Type (0=Market, 1=Limit)
         - Dígitos 4-6: Sequence (000-999)
         
         Args:
-            bot_id: ID del bot (1-5)
+            bot_id: ID del bot (1-5 o 101-106, se mapean a 1-6)
             ia_config_id: ID de configuración IA (0-9)
             order_type: Tipo de orden ('market' o 'limit', case-insensitive)
             sequence: Número de secuencia (0-999, default: 0)
@@ -174,7 +174,7 @@ class MagicNumberGenerator:
             Magic Number de 6 dígitos
         
         Raises:
-            InvalidBotIdError: Si bot_id no está entre 1 y 5
+            InvalidBotIdError: Si bot_id no es válido
             InvalidIAConfigIdError: Si ia_config_id no está entre 0 y 9
             InvalidOrderTypeError: Si order_type no es 'market' o 'limit'
             MagicNumberError: Si sequence no está entre 0 y 999
@@ -183,12 +183,22 @@ class MagicNumberGenerator:
             >>> generator = MagicNumberGenerator()
             >>> generator.generate(1, 0, "market")  # 100000
             >>> generator.generate(2, 3, "limit", 456)  # 231456
+            >>> generator.generate(101, 0, "market")  # 100000 (101 se mapea a 1)
+            >>> generator.generate(106, 0, "market")  # 600000 (106 se mapea a 6)
         """
         # Validar parámetros
         self._validate_bot_id(bot_id)
         self._validate_ia_config_id(ia_config_id)
         order_type_code = self._validate_and_encode_order_type(order_type)
         self._validate_sequence(sequence)
+        
+        # ✅ Mapear bot_id de 3 dígitos (101-106) a 1 dígito (1-6)
+        # IDs legacy (1-5) se mantienen igual
+        # IDs nuevos (101-106) se mapean: 101->1, 102->2, ..., 106->6
+        if bot_id >= 101:
+            mapped_bot_id = bot_id - 100
+        else:
+            mapped_bot_id = bot_id
         
         # Construir Magic Number
         # Formato: BITSSS
@@ -198,7 +208,7 @@ class MagicNumberGenerator:
         # SSS = Sequence (3 dígitos)
         
         magic_number = (
-            bot_id * 100000 +           # Primer dígito
+            mapped_bot_id * 100000 +    # Primer dígito (mapeado)
             ia_config_id * 10000 +      # Segundo dígito
             order_type_code * 1000 +    # Tercer dígito
             sequence                     # Últimos 3 dígitos
@@ -206,7 +216,7 @@ class MagicNumberGenerator:
         
         self.logger.debug(
             f"Magic Number generado: {magic_number} "
-            f"(Bot={bot_id}, IA={ia_config_id}, Type={order_type}, Seq={sequence})"
+            f"(Bot={bot_id} [mapped to {mapped_bot_id}], IA={ia_config_id}, Type={order_type}, Seq={sequence})"
         )
         
         return magic_number
@@ -216,6 +226,10 @@ class MagicNumberGenerator:
     def decode(self, magic_number: int) -> MagicNumberComponents:
         """
         Decodifica un Magic Number en sus componentes.
+        
+        NOTA: El bot_id retornado es siempre el ID mapeado (1-6), no el ID original.
+        Si necesitas distinguir entre IDs legacy (1-5) e IDs nuevos (101-106),
+        usa contexto adicional.
         
         Args:
             magic_number: Magic Number de 6 dígitos
@@ -233,6 +247,8 @@ class MagicNumberGenerator:
             >>> components = generator.decode(231456)
             >>> print(components.bot_id)  # 2
             >>> print(components.order_type)  # 'limit'
+            >>> components = generator.decode(600000)
+            >>> print(components.bot_id)  # 6 (podría ser bot 6 o bot 106)
         """
         # Validar longitud
         if not (100000 <= magic_number <= 999999):
@@ -248,7 +264,14 @@ class MagicNumberGenerator:
         sequence = magic_number % 1000
         
         # Validar componentes decodificados
-        self._validate_bot_id(bot_id)
+        # NOTA: bot_id aquí es el valor mapeado (1-6), no validamos con _validate_bot_id
+        # porque aceptaría 101-106 que no son el valor decodificado correcto
+        if bot_id < 1 or bot_id > 9:
+            raise InvalidBotIdError(
+                f"bot_id decodificado inválido: {bot_id}. "
+                f"Debe estar entre 1 y 9 (valores mapeados)"
+            )
+        
         self._validate_ia_config_id(ia_config_id)
         
         # Decodificar tipo de orden
@@ -272,7 +295,7 @@ class MagicNumberGenerator:
         
         self.logger.debug(
             f"Magic Number decodificado: {magic_number} -> "
-            f"Bot={bot_id}, IA={ia_config_id}, Type={order_type}, Seq={sequence}"
+            f"Bot={bot_id} [mapped], IA={ia_config_id}, Type={order_type}, Seq={sequence}"
         )
         
         return components

@@ -1014,7 +1014,8 @@ class IntradayBot1Strategy(BaseBotOperations):
                 extra={
                     "symbol": symbol,
                     "has_position": has_position,
-                    "positions_count": len(positions),
+                    "all_positions_count": len(all_positions),
+                    "bot_positions_count": len(bot_positions),
                 },
             )
             

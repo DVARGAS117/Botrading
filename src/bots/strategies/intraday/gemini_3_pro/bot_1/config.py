@@ -21,7 +21,7 @@ def get_bot_1_config(mode: BotMode = BotMode.DEMO) -> BotConfig:
         BotConfig: Configuración del bot con parámetros optimizados para Gemini 3 Pro
     """
     return BotConfig(
-        bot_id=5,  # ID único para estrategia INTRADAY (bot_id debe estar entre 1-5)
+        bot_id=3,  # ID único para estrategia INTRADAY con Gemini 3 Pro (IDs ocupados: 1=VWAP Bot1, 2=VWAP Bot2)
         bot_name="INTRADAY Baseline",
         bot_type="numerico",  # Tipo numerico (análisis basado en indicadores)
         mode=mode,
