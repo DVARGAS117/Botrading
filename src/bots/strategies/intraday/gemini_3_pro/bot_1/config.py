@@ -25,7 +25,7 @@ def get_bot_1_config(mode: BotMode = BotMode.DEMO) -> BotConfig:
         bot_name="INTRADAY Baseline",
         bot_type="numerico",  # Tipo numerico (análisis basado en indicadores)
         mode=mode,
-        symbols=["EURUSD", "GBPUSD", "USDCAD", "USDCHF", "XAUUSD"],  # Cinco pares principales para zona de oro (NY+Londres overlap)
+        symbols=[],  # Símbolos definidos dinámicamente por trading_sessions.json
         timeframes=[
             Timeframe.M1,   # Para señales precisas de entrada
             Timeframe.M5,   # Para contexto táctico

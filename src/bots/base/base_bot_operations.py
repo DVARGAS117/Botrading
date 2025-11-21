@@ -108,8 +108,7 @@ class BotConfig:
         if self.bot_type not in ["numerico", "visual", "hibrido"]:
             raise ValueError(f"bot_type inválido: {self.bot_type}")
         
-        if not self.symbols:
-            raise ValueError("symbols no puede estar vacío")
+        # symbols puede estar vacío: se obtendrá dinámicamente de trading_sessions.json
         
         if self.risk_per_trade <= 0 or self.risk_per_trade > 5.0:
             raise ValueError(f"risk_per_trade debe estar entre 0 y 5.0, recibido: {self.risk_per_trade}")
@@ -404,10 +403,11 @@ class BaseBotOperations(ABC):
         
         if allow_reevaluation and self.mt5_connection:
             try:
-                for symbol in self.config.symbols:
-                    positions = self.mt5_connection.get_positions(symbol=symbol)
-                    if len(positions) > 0:
-                        symbols_with_positions.append(symbol)
+                # Obtener TODAS las posiciones del bot (sin filtrar por símbolo)
+                all_positions = self.mt5_connection.get_positions()
+                for pos in all_positions:
+                    if pos.magic == self.config.bot_id and pos.symbol not in symbols_with_positions:
+                        symbols_with_positions.append(pos.symbol)
             except Exception as e:
                 self.logger.warning(
                     f"Error obteniendo posiciones abiertas: {e}",
@@ -418,9 +418,9 @@ class BaseBotOperations(ABC):
         active_symbols = set(session_symbols)
         active_symbols.update(symbols_with_positions)
         
-        # Filtrar por símbolos configurados
-        configured_symbols = set(self.config.symbols)
-        final_symbols = sorted(list(active_symbols & configured_symbols))
+        # Usar símbolos activos directamente (trading_sessions.json define qué operar)
+        # No filtrar por config.symbols: el archivo de sesiones es la única fuente de verdad
+        final_symbols = sorted(list(active_symbols))
         
         # Log de símbolos con posiciones si están fuera de sesión
         if symbols_with_positions:
