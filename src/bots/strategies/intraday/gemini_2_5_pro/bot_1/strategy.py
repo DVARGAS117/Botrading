@@ -987,22 +987,27 @@ class IntradayBot1Strategy(BaseBotOperations):
                     return False
             
             # Usar la property position_manager para asegurar inicialización lazy
-            # Generar magic number estructurado para búsqueda
-            magic_to_use = self.config.bot_id
-            if self.magic_number_generator:
-                magic_to_use = self.magic_number_generator.generate(
-                    bot_id=self.config.bot_id,
-                    ia_config_id=0,
-                    order_type="market",
-                    sequence=0
-                )
+            # Obtener TODAS las posiciones del símbolo y filtrar por bot_id
+            all_positions = self.mt5_connection.get_positions(symbol=symbol)
             
-            positions = self.position_manager.get_positions_by_symbol_and_magic(
-                symbol=symbol,
-                magic=magic_to_use
-            )
+            # Filtrar posiciones que pertenecen a este bot
+            # Magic number formato: BIISSSS (bot_id en primeros 1-3 dígitos)
+            bot_positions = []
+            for pos in all_positions:
+                # Extraer bot_id del magic number
+                magic_str = str(pos.magic)
+                if len(magic_str) >= 1:
+                    # Para bot_id 1-5: magic empieza con ese dígito
+                    # Para bot_id 101-106: magic empieza con esos 3 dígitos
+                    if self.config.bot_id < 10:
+                        pos_bot_id = int(magic_str[0])
+                    else:
+                        pos_bot_id = int(magic_str[:3]) if len(magic_str) >= 3 else 0
+                    
+                    if pos_bot_id == self.config.bot_id:
+                        bot_positions.append(pos)
             
-            has_position = len(positions) > 0
+            has_position = len(bot_positions) > 0
             
             self.logger.debug(
                 f"Verificación de posición activa para {symbol}: {has_position}",
@@ -1044,13 +1049,23 @@ class IntradayBot1Strategy(BaseBotOperations):
             - ticket: Ticket de la orden
         """
         try:
-            # Obtener posiciones del símbolo con el magic number del bot
-            positions = self.position_manager.get_positions_by_symbol_and_magic(
-                symbol=symbol,
-                magic=self.config.bot_id
-            )
+            # Obtener TODAS las posiciones del símbolo
+            all_positions = self.mt5_connection.get_positions(symbol=symbol)
             
-            if not positions:
+            # Filtrar posiciones que pertenecen a este bot
+            bot_positions = []
+            for pos in all_positions:
+                magic_str = str(pos.magic)
+                if len(magic_str) >= 1:
+                    if self.config.bot_id < 10:
+                        pos_bot_id = int(magic_str[0])
+                    else:
+                        pos_bot_id = int(magic_str[:3]) if len(magic_str) >= 3 else 0
+                    
+                    if pos_bot_id == self.config.bot_id:
+                        bot_positions.append(pos)
+            
+            if not bot_positions:
                 self.logger.warning(
                     f"No se encontró posición activa para {symbol}",
                     extra={"symbol": symbol},
@@ -1073,7 +1088,7 @@ class IntradayBot1Strategy(BaseBotOperations):
                 }
             
             # Tomar la primera posición (debería haber solo una por símbolo)
-            position = positions[0]
+            position = bot_positions[0]
             
             # Determinar tipo de posición
             position_type = "LONG" if position.type == 0 else "SHORT"  # 0=BUY, 1=SELL
