@@ -100,16 +100,15 @@ class BotConfig:
     
     def __post_init__(self):
         """Validar configuración"""
-        # Aceptar bot_id de 1-5 (legacy) o 101-105 (nuevos IDs de 3 dígitos)
-        valid_ids = [1, 2, 3, 4, 5, 101, 102, 103, 104, 105]
+        # Aceptar bot_id de 1-5 (legacy) o 101-106 (nuevos IDs de 3 dígitos)
+        valid_ids = [1, 2, 3, 4, 5, 101, 102, 103, 104, 105, 106]
         if self.bot_id not in valid_ids:
             raise ValueError(f"bot_id debe ser uno de {valid_ids}, recibido: {self.bot_id}")
         
         if self.bot_type not in ["numerico", "visual", "hibrido"]:
             raise ValueError(f"bot_type inválido: {self.bot_type}")
         
-        if not self.symbols:
-            raise ValueError("symbols no puede estar vacío")
+        # symbols puede estar vacío: se obtendrá dinámicamente de trading_sessions.json
         
         if self.risk_per_trade <= 0 or self.risk_per_trade > 5.0:
             raise ValueError(f"risk_per_trade debe estar entre 0 y 5.0, recibido: {self.risk_per_trade}")
@@ -250,7 +249,9 @@ class BaseBotOperations(ABC):
                 os.environ["GOOGLE_API_KEY"] = api_key
                 
                 model_to_use = self.config.ai_model
-                if model_to_use != "gemini-3-pro-preview" and os.getenv("ALLOW_CUSTOM_GEMINI_MODEL") != "1":
+                # Permitir modelos: gemini-3-pro-preview y gemini-2.5-pro
+                allowed_models = ["gemini-3-pro-preview", "gemini-2.5-pro"]
+                if model_to_use not in allowed_models and os.getenv("ALLOW_CUSTOM_GEMINI_MODEL") != "1":
                     self.logger.warning(
                         f"Modelo '{model_to_use}' reemplazado por 'gemini-3-pro-preview' (enforcement)"
                     )
@@ -402,10 +403,11 @@ class BaseBotOperations(ABC):
         
         if allow_reevaluation and self.mt5_connection:
             try:
-                for symbol in self.config.symbols:
-                    positions = self.mt5_connection.get_positions(symbol=symbol)
-                    if len(positions) > 0:
-                        symbols_with_positions.append(symbol)
+                # Obtener TODAS las posiciones del bot (sin filtrar por símbolo)
+                all_positions = self.mt5_connection.get_positions()
+                for pos in all_positions:
+                    if pos.magic == self.config.bot_id and pos.symbol not in symbols_with_positions:
+                        symbols_with_positions.append(pos.symbol)
             except Exception as e:
                 self.logger.warning(
                     f"Error obteniendo posiciones abiertas: {e}",
@@ -416,9 +418,9 @@ class BaseBotOperations(ABC):
         active_symbols = set(session_symbols)
         active_symbols.update(symbols_with_positions)
         
-        # Filtrar por símbolos configurados
-        configured_symbols = set(self.config.symbols)
-        final_symbols = sorted(list(active_symbols & configured_symbols))
+        # Usar símbolos activos directamente (trading_sessions.json define qué operar)
+        # No filtrar por config.symbols: el archivo de sesiones es la única fuente de verdad
+        final_symbols = sorted(list(active_symbols))
         
         # Log de símbolos con posiciones si están fuera de sesión
         if symbols_with_positions:
@@ -685,43 +687,84 @@ class BaseBotOperations(ABC):
     
     def run_continuous(self, interval_seconds: int = 300) -> None:
         """
-        Ejecuta el bot en modo continuo con intervalo especificado.
+        Ejecuta el bot en modo continuo sincronizado con velas M15.
+        
+        Ciclos programados: 00:01, 00:16, 00:31, 00:46 de cada hora
+        (1 minuto después del cierre de vela M15)
         
         Args:
-            interval_seconds: Segundos entre cada ciclo de trading (default: 300 = 5min)
+            interval_seconds: Segundos entre cada ciclo (default: 900 = 15min para M15)
         """
         if not self.is_initialized:
             self.logger.error("Bot no inicializado. Ejecuta initialize() primero.")
             return
         
         import time
+        from datetime import datetime, timedelta
         
         self.logger.info(f"Iniciando modo continuo con intervalo de {interval_seconds}s")
         
+        def get_next_cycle_time() -> datetime:
+            """Calcula el próximo tiempo de ciclo: 1 minuto después de vela M15 cerrada.
+            
+            Velas M15 se cierran en: :00, :15, :30, :45
+            Ciclos ejecutan en: :01, :16, :31, :46
+            """
+            now = datetime.now()
+            current_minute = now.minute
+            
+            # Calcular minuto de cierre de vela más cercano
+            if current_minute < 15:
+                next_close = 15
+            elif current_minute < 30:
+                next_close = 30
+            elif current_minute < 45:
+                next_close = 45
+            else:
+                next_close = 0  # Siguiente hora
+            
+            # Ciclo es 1 minuto después del cierre
+            next_cycle_minute = (next_close + 1) % 60
+            
+            # Si next_close=0 (cambio de hora), agregar 1 hora
+            if next_close == 0 and current_minute >= 45:
+                next_time = now.replace(minute=next_cycle_minute, second=0, microsecond=0)
+                next_time += timedelta(hours=1)
+            else:
+                next_time = now.replace(minute=next_cycle_minute, second=0, microsecond=0)
+            
+            # Si ya pasó este minuto, avanzar al siguiente ciclo
+            if next_time <= now:
+                next_time += timedelta(minutes=15)
+            
+            return next_time
+        
         try:
             while True:
-                cycle_start = time.time()
+                # Calcular próximo ciclo
+                next_cycle = get_next_cycle_time()
+                wait_seconds = (next_cycle - datetime.now()).total_seconds()
+                
+                if wait_seconds > 0:
+                    self.logger.info(
+                        f"⏳ Próximo ciclo: {next_cycle.strftime('%H:%M:%S')} "
+                        f"(en {wait_seconds:.0f}s)",
+                        extra={'next_cycle': next_cycle.isoformat(), 'wait_seconds': wait_seconds}
+                    )
+                    time.sleep(wait_seconds)
                 
                 # Ejecutar ciclo de trading
+                cycle_start = time.time()
                 try:
                     self.run_trading_cycle()
                 except Exception as e:
                     self.logger.error(f"Error en ciclo de trading: {e}")
                 
-                # Calcular tiempo de espera
                 cycle_duration = time.time() - cycle_start
-                sleep_time = max(0, interval_seconds - cycle_duration)
-                
-                if sleep_time > 0:
-                    self.logger.debug(
-                        f"Esperando {sleep_time:.1f}s hasta próximo ciclo...",
-                        extra={'cycle_duration': cycle_duration, 'sleep_time': sleep_time}
-                    )
-                    time.sleep(sleep_time)
-                else:
-                    self.logger.warning(
-                        f"⚠️ Ciclo tardó {cycle_duration:.1f}s (>{interval_seconds}s configurados)"
-                    )
+                self.logger.debug(
+                    f"Ciclo completado en {cycle_duration:.1f}s",
+                    extra={'cycle_duration': cycle_duration}
+                )
         
         except KeyboardInterrupt:
             self.logger.info("Modo continuo interrumpido por usuario")

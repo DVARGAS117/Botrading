@@ -1,7 +1,7 @@
-"""Configuración del Bot 1 (INTRADAY Gemini 3 Pro).
+"""Configuración del Bot 1 (INTRADAY Gemini 2.5 Pro).
 
 Este archivo define la configuración base para el bot de estrategia INTRADAY
-utilizando el modelo Gemini 3 Pro con los parámetros óptimos recomendados:
+utilizando el modelo Gemini 2.5 Pro con los parámetros óptimos recomendados:
 - thinking_level: HIGH (para razonamiento profundo)
 - code_execution: Habilitado (cálculos matemáticos precisos)
 - media_resolution: high (análisis de alta calidad)
@@ -12,17 +12,17 @@ from src.core.mt5_data_extractor import Timeframe
 
 
 def get_bot_1_config(mode: BotMode = BotMode.DEMO) -> BotConfig:
-    """Obtiene la configuración para Bot 1 (INTRADAY Baseline).
+    """Obtiene la configuración para Bot 1 (INTRADAY Gemini 2.5 Pro).
     
     Args:
         mode: Modo de operación (DEMO o LIVE)
         
     Returns:
-        BotConfig: Configuración del bot con parámetros optimizados para Gemini 3 Pro
+        BotConfig: Configuración del bot con parámetros optimizados para Gemini 2.5 Pro
     """
     return BotConfig(
-        bot_id=5,  # ID único para estrategia INTRADAY (bot_id debe estar entre 1-5)
-        bot_name="INTRADAY Baseline",
+        bot_id=106,  # ID único para estrategia INTRADAY con Gemini 2.5 Pro
+        bot_name="INTRADAY Gemini 2.5 Pro",
         bot_type="numerico",  # Tipo numerico (análisis basado en indicadores)
         mode=mode,
         symbols=[],  # Símbolos definidos dinámicamente por trading_sessions.json
@@ -37,15 +37,15 @@ def get_bot_1_config(mode: BotMode = BotMode.DEMO) -> BotConfig:
         risk_per_trade=1.0,  # 1% de riesgo por operación (configuración INTRADAY)
         max_daily_risk=3.0,  # Máximo 3R de pérdida diaria
         reevaluation_interval_minutes=10,  # Reevaluación cada 10 minutos
-        ai_model="gemini-3-pro-preview",  # Modelo Gemini 3 Pro
+        ai_model="gemini-2.5-pro",  # Modelo Gemini 2.5 Pro
         enable_dual_orders=False,  # INTRADAY: Solo una orden por señal
         log_level="INFO",
     )
 
 
 BOT_1_SETTINGS = {
-    "nombre_corto": "B1_INTRADAY",
-    "descripcion": "Bot baseline para estrategia INTRADAY con Gemini 3 Pro",
+    "nombre_corto": "B1_INTRADAY_2.5",
+    "descripcion": "Bot baseline para estrategia INTRADAY con Gemini 2.5 Pro",
     "version": "1.0.0",
     "estrategia": "INTRADAY",
     
@@ -59,7 +59,7 @@ BOT_1_SETTINGS = {
         "max_candles_1h": 24,    # Últimas 24 velas H1
     },
     
-    # Parámetros específicos de Gemini 3 Pro
+    # Parámetros específicos de Gemini 2.5 Pro
     "gemini_config": {
         "thinking_level": "HIGH",  # Razonamiento profundo
         "code_execution": True,    # Habilitar ejecución de código Python

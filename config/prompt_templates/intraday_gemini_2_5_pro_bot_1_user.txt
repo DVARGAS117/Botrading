@@ -1,0 +1,45 @@
+### CONTEXTO OPERATIVO ACTUAL
+- HORA (PET): {current_time}
+- PAR/ACTIVO: {symbol}
+- ID OPERACIÓN: {operation_id}
+
+### ESTADO DE MI CARTERA
+{current_position}
+*(Formato cuando NO hay posición: "POSICIÓN ACTUAL: NONE")*
+*(Formato cuando SÍ hay posición: Ver detalles completos arriba con PnL, SL actual, SL inicial, TP, etc.)*
+
+### DATOS DE MERCADO (PRE-CALCULADOS)
+
+1. CONTEXTO MACRO (D1 - Últimas 30 velas cerradas):
+```json
+{strategic_package}
+```
+
+2. CONTEXTO TÁCTICO (M15 - Últimas 200 velas, la última es la recién cerrada):
+```json
+{tactical_package}
+```
+
+### TU MISIÓN AHORA MISMO:
+
+ESCENARIO 1: SI NO HAY POSICIÓN ACTIVA ("POSICIÓN ACTUAL: NONE")
+Analiza la vela más reciente del array JSON 'CONTEXTO TÁCTICO' (la última de la lista). Usando las 199 anteriores como contexto, determina: ¿Esa última vela activa alguna señal de entrada A, B o C?
+- Si SÍ: Devuelve "accion": "COMPRAR" o "VENDER" con los valores de "stop_loss" y "take_profit" calculados.
+- Si NO: Devuelve "accion": "NO_OPERAR".
+
+ESCENARIO 2: SI HAY POSICIÓN ACTIVA
+Calcula el PnL actual en base al riesgo inicial (R = Entrada - SL_INICIAL).
+El sistema ya te proporciona este cálculo en el campo "Riesgo Inicial (1R)" y el PnL en R.
+
+Evalúa la gestión de riesgo:
+- Si precio tocó SL o TP: "accion": "CERRAR".
+- Si Ganancia >= 1R y SL_ACTUAL sigue en negativo (no en break-even): "accion": "AJUSTAR_SL_TP" (Mover SL a precio de entrada).
+- Si Ganancia >= 2R: "accion": "AJUSTAR_SL_TP" (Mover SL para asegurar al menos +1R de ganancia).
+- Si estructura de mercado cambió en contra: "accion": "CERRAR" (Salida manual anticipada).
+- Si todo sigue válido y no requiere ajustes: "accion": "MANTENER".
+
+IMPORTANTE SOBRE SL/TP:
+- En los campos "stop_loss" y "take_profit", devuelve SIEMPRE el valor NUMÉRICO absoluto (precio exacto).
+- Si sugieres AJUSTAR_SL_TP, estos campos deben contener los NUEVOS valores deseados.
+- Si sugieres MANTENER, puedes dejar "stop_loss" y "take_profit" en null o repetir los valores actuales.
+- Si sugieres CERRAR, puedes dejar "stop_loss" y "take_profit" en null (se ignoran al cerrar).
