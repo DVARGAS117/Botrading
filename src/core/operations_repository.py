@@ -67,6 +67,7 @@ class Operation:
     # Identificación
     id: Optional[int] = None
     magic_number: int = 0
+    ticket: Optional[int] = None  # Ticket real de MT5 (puede diferir del magic v2)
     bot_id: int = 0
     ia_id: int = 0
     
@@ -106,6 +107,7 @@ class Operation:
         return {
             'id': self.id,
             'magic_number': self.magic_number,
+            'ticket': self.ticket,
             'bot_id': self.bot_id,
             'ia_id': self.ia_id,
             'order_type': self.order_type.value if isinstance(self.order_type, OrderType) else self.order_type,
@@ -204,7 +206,8 @@ class OperationsRepository:
         close_time: Optional[datetime] = None,
         conversation_id: Optional[str] = None,
         stop_loss_initial: Optional[float] = None,
-        take_profit_initial: Optional[float] = None
+        take_profit_initial: Optional[float] = None,
+        ticket: Optional[int] = None
     ) -> Operation:
         """
         Crea una nueva operación en la base de datos.
@@ -230,6 +233,7 @@ class OperationsRepository:
             conversation_id: ID de conversación con IA (opcional)
             stop_loss_initial: SL inicial al abrir (opcional, usa stop_loss si no se provee)
             take_profit_initial: TP inicial al abrir (opcional, usa take_profit si no se provee)
+            ticket: Número de ticket real asignado por el broker (opcional)
         
         Returns:
             Operation: La operación creada con su ID asignado
@@ -262,7 +266,7 @@ class OperationsRepository:
                 cursor = conn.cursor()
                 
                 # ✅ Verificar si ya existe operación con este magic_number
-                cursor.execute("SELECT id FROM operations WHERE magic_number = ?", (magic_number,))
+                cursor.execute("SELECT id, ticket FROM operations WHERE magic_number = ?", (magic_number,))
                 existing = cursor.fetchone()
                 if existing:
                     self.logger.warning(f"Operación con magic_number {magic_number} ya existe (ID={existing[0]}). Retornando existente.")
@@ -274,9 +278,9 @@ class OperationsRepository:
                         suggested_price, actual_entry_price, stop_loss, take_profit,
                         stop_loss_initial, take_profit_initial,
                         lot_size, risk_percentage, risk_amount, status, profit_loss,
-                        open_time, close_time, conversation_id,
+                        open_time, close_time, conversation_id, ticket,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     magic_number, bot_id, ia_id,
                     order_type.value, symbol, direction.value,
@@ -288,6 +292,7 @@ class OperationsRepository:
                     open_time.isoformat() if open_time else None,
                     close_time.isoformat() if close_time else None,
                     conversation_id,
+                    ticket,
                     now.isoformat(), now.isoformat()
                 ))
                 
@@ -372,6 +377,34 @@ class OperationsRepository:
         
         except Exception as e:
             self.logger.error(f"Error obteniendo operación por magic_number {magic_number}: {e}")
+            return None
+
+    def get_operation_by_ticket(self, ticket: int) -> Optional[Operation]:
+        """Obtiene una operación por su ticket real de MT5.
+
+        Args:
+            ticket: Número de ticket de la posición
+
+        Returns:
+            Operation si existe, None si no se encuentra o columna no disponible
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                # Verificar que la columna ticket existe (compatibilidad retro)
+                cursor.execute("PRAGMA table_info(operations)")
+                cols = {r[1] for r in cursor.fetchall()}
+                if 'ticket' not in cols:
+                    self.logger.warning("Columna 'ticket' no existe en la tabla operations (BD antigua)")
+                    return None
+                cursor.execute("SELECT * FROM operations WHERE ticket = ?", (ticket,))
+                row = cursor.fetchone()
+                if row:
+                    return self._row_to_operation(row)
+                return None
+        except Exception as e:
+            self.logger.error(f"Error obteniendo operación por ticket {ticket}: {e}")
             return None
     
     def get_open_operation_for_symbol_and_magic(
@@ -656,7 +689,7 @@ class OperationsRepository:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
-                # Crear tabla operations
+                # Crear tabla operations (añadimos columna ticket para identificar el ticket real de MT5)
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS operations (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -688,6 +721,7 @@ class OperationsRepository:
                         
                         -- Referencia a IA
                         conversation_id TEXT,
+                        ticket INTEGER,
                         
                         -- Timestamps
                         created_at TEXT NOT NULL,
@@ -702,11 +736,17 @@ class OperationsRepository:
                 cols = {r[1] for r in cursor.fetchall()}
                 if 'risk_amount' not in cols:
                     cursor.execute("ALTER TABLE operations ADD COLUMN risk_amount REAL NOT NULL DEFAULT 0.0")
+                if 'ticket' not in cols:
+                    cursor.execute("ALTER TABLE operations ADD COLUMN ticket INTEGER")
                 
                 # Crear índices para consultas eficientes
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_magic_symbol 
                     ON operations(magic_number, symbol)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_ticket 
+                    ON operations(ticket)
                 """)
                 
                 cursor.execute("""
@@ -749,6 +789,7 @@ class OperationsRepository:
         return Operation(
             id=row_dict['id'],
             magic_number=row_dict['magic_number'],
+            ticket=row_dict.get('ticket'),
             bot_id=row_dict['bot_id'],
             ia_id=row_dict['ia_id'],
             order_type=OrderType(row_dict['order_type']),

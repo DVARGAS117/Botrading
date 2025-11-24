@@ -302,5 +302,33 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ---
 
-**Última actualización**: 20 de noviembre de 2025  
+## [1.0.2] - 2025-11-24
+
+### 🔐 Persistencia de Ticket MT5 (T53)
+
+#### Agregado
+- Columna `ticket` en tabla `operations` (SQLite) con índice `idx_ticket`.
+- Método `get_operation_by_ticket()` en `OperationsRepository`.
+- Estrategias intraday ahora guardan y recuperan operaciones usando `ticket` real del broker.
+- Scripts de saneamiento: `scripts/list_open_positions.py` y `scripts/close_residual_positions.py`.
+
+#### Mejorado
+- Cierre determinístico sin depender de heurísticas por símbolo/magic_number.
+- Cache `_active_magic_by_symbol` como fallback retrocompatible.
+- Manejo informativo de retcode `10025` en cuentas Netting (sin cambios reales SL/TP).
+
+#### Impacto
+- Reducción de riesgo de cierre incorrecto.
+- Trazabilidad exacta MT5 ↔ SQLite.
+- Base para auditoría y futuros dashboards de rendimiento por ticket.
+
+#### Archivos Clave
+- `src/core/operations_repository.py`
+- Estrategias intraday (`strategy.py` variantes Gemini)
+- `base_bot_operations.py`
+- Documentación: `context/DOCUMENTACION/T53_persistencia_ticket_mt5_cierre_deterministico.md`
+
+---
+
+**Última actualización**: 24 de noviembre de 2025  
 **Mantenido por**: Sistema Botrading

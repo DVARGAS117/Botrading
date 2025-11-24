@@ -12,8 +12,8 @@
 ## 📋 Estado del Proyecto
 
 **Fase Actual:** Fase 0 - Fundamentos  
-**Último Ticket Completado:** T52 - Operación demo antes de real ✅  
-**Fecha:** 7 de Noviembre de 2025
+**Último Ticket Completado:** T53 - Persistencia ticket MT5 y cierre determinístico ✅  
+**Fecha:** 24 de Noviembre de 2025
 
 ---
 
@@ -239,6 +239,7 @@ Test asociado: `test_ia_query_persistence.py` verifica almacenamiento de tokens 
 | T40 | Registro de errores de parsing de respuestas IA | ✅ | 87% |
 | T36 | Activación de filtros vía configuración | ✅ | 86% |
 | T52 | Operación demo antes de real | ✅ | 88% |
+| T53 | Persistencia ticket MT5 y cierre determinístico | ✅ | 84% |
 
 ---
 
@@ -283,6 +284,7 @@ pytest tests/unit/test_config_loader.py -v
 - **[T36 - Filter Manager](context/DOCUMENTACION/T36_filtros_configurables.md)** - Filtros configurables
 - **[T52 - Demo Mode Validator](context/DOCUMENTACION/T52_operacion_demo_antes_real.md)** - Validación demo antes de real
 - **[Formato Respuestas IA](context/FORMATO_RESPUESTAS_IA.md)** - Formato JSON para prompts IA
+- **[T53 - Persistencia Ticket MT5](context/DOCUMENTACION/T53_persistencia_ticket_mt5_cierre_deterministico.md)** - Ticket real y cierre confiable
 
 ---
 
@@ -295,7 +297,7 @@ pytest tests/unit/test_config_loader.py -v
 - **python-dotenv** - Variables de entorno
 - **MetaTrader 5** - Plataforma de trading (próximamente)
 - **Google Vertex AI (Gemini)** - IA para decisiones (oficial)
-- **SQLite** - Base de datos (próximamente)
+- **SQLite** - Base de datos (operaciones, consultas IA, tickets MT5)
 
 ---
 
@@ -337,10 +339,11 @@ pytest tests/unit/test_config_loader.py -v
 - [x] T36 - Filtros vía configuración
 - [x] T52 - Operación demo antes de real
 
-### Fase 1: Núcleo (Próximamente)
+### Fase 1: Núcleo (En Progreso)
+- [x] Integración parcial MT5 (apertura/actualización/cierre posiciones)
+- [x] Persistencia ticket MT5 (T53)
+- [x] Cache magic_number activo por símbolo
 - [ ] Orquestación de bots
-- [ ] Integración MT5
-- [ ] Magic Numbers
 - [ ] Multi-activo
 
 ### Fase 2: IA y Estrategias (Futuro)
@@ -362,7 +365,41 @@ pytest tests/unit/test_config_loader.py -v
 | Métricas de coste Vertex | ⏳ | Por definir (sin cálculo actual) |
 | Documentación de fallback | ✅ | README y guía Vertex actualizados |
 
-Nota: Actualmente sólo Bot1 está disponible; cualquier referencia a ejecución multi-bot es futura.
+Nota: Actualmente sólo Bot1 está disponible; cualquier referencia a ejecución multi-bot es futura. Ticket T53 agrega robustez al cierre sin requerir ticket en respuesta IA.
+
+---
+
+## 🔁 Scripts Operativos Nuevos (Post T53)
+
+Estos scripts ayudan a inspeccionar y sanear posiciones reales cuando se ejecutan pruebas o ciclos manuales:
+
+| Script | Propósito | Uso Rápido |
+|--------|-----------|------------|
+| `scripts/list_open_positions.py` | Listar todas las posiciones abiertas en MT5 con ticket y magic v2 | `python scripts/list_open_positions.py` |
+| `scripts/close_residual_positions.py` | Cerrar posiciones intraday residuales por símbolo o todas | `python scripts/close_residual_positions.py --symbol BTCUSD` |
+
+Ejemplo en PowerShell:
+```powershell
+python scripts/list_open_positions.py
+python scripts/close_residual_positions.py --symbol BTCUSD
+```
+
+Ambos scripts dependen de una conexión MT5 activa y credenciales correctas. Úsalos después de pruebas que abortan antes del cierre normal.
+
+---
+
+## 🔐 Persistencia del Ticket MT5 (T53)
+
+Antes de T53 el cierre dependía de heurísticas (búsqueda por símbolo y magic_number) porque la IA no proveía el campo `ticket`. Ahora:
+
+1. `operations_repository` almacena columna `ticket` e índice `idx_ticket`.
+2. Estrategias intraday guardan el `position.ticket` al abrir y recuperan por `get_operation_by_ticket` en actualización/cierre.
+3. Fallback seguro: cache `_active_magic_by_symbol` para escenarios donde no se pudo guardar ticket (compatibilidad retro).
+4. Comportamiento en cuentas Netting: Dos aperturas mismas condiciones pueden compartir ticket; segundo update puede devolver retcode de “No changes” (`10025`) que ahora se considera benigno.
+
+Beneficios: Cierre determinístico, reducción de ambigüedad multi-posición y trazabilidad exacta entre MT5 y SQLite.
+
+---
 
 ---
 

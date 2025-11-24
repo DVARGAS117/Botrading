@@ -1132,8 +1132,88 @@ class BaseBotOperations(ABC):
             if ticket:
                 self.order_manager.close_position(ticket=int(ticket))
             else:
-                # Sin ticket explícito, evitar cerrar en masa por seguridad
-                self.logger.warning("Sin 'ticket' en decisión; cierre manual requerido")
+                # Intentar resolver el ticket por magic_number (BD) y/o Magic v2 del bot
+                if hasattr(self, 'mt5_connection') and self.mt5_connection is not None:
+                    positions = self.mt5_connection.get_positions(symbol=symbol)
+                    if not positions:
+                        self.logger.warning("No hay posiciones abiertas para cerrar en este símbolo")
+                        return
+
+                    expected_magic = None
+                    # 1) Intentar obtener magic desde la BD para este símbolo y bot
+                    try:
+                        from src.core.operations_repository import OperationStatus as _OpStatus
+                        if hasattr(self, 'operations_repo') and self.operations_repo is not None and hasattr(self, 'config'):
+                            open_ops = self.operations_repo.list_operations(
+                                status=_OpStatus.OPEN, symbol=symbol, bot_id=getattr(self.config, 'bot_id', None), limit=5
+                            )
+                            if open_ops:
+                                # Elegir la más reciente (primera)
+                                expected_magic = int(open_ops[0].magic_number)
+                    except Exception:
+                        expected_magic = None
+
+                    chosen = None
+                    # 2) Si tenemos magic esperado, buscar esa posición exacta
+                    if expected_magic is not None:
+                        for p in positions:
+                            try:
+                                if int(getattr(p, 'magic', -1)) == expected_magic:
+                                    chosen = p
+                                    break
+                            except Exception:
+                                continue
+
+                    # 3) Si no se encontró, filtrar por Magic v2 del bot
+                    if chosen is None:
+                        try:
+                            from src.core.agent_variant_codes import resolve_codes
+                            from src.core.enhanced_magic_number_generator import EnhancedMagicNumberGenerator
+                            family_id, strategy_id, agent_variant_id = resolve_codes(
+                                ai_model=getattr(self.config, 'ai_model', ''), strategy_name="INTRADAY", data_mode="raw"
+                            )
+                            magic_v2 = EnhancedMagicNumberGenerator()
+                            candidates = []
+                            for p in positions:
+                                try:
+                                    comp = magic_v2.decode(int(getattr(p, 'magic', 0)))
+                                    if (
+                                        comp.family_id == family_id and
+                                        comp.strategy_id == strategy_id and
+                                        comp.agent_id == agent_variant_id
+                                    ):
+                                        candidates.append(p)
+                                except Exception:
+                                    continue
+                            if candidates:
+                                # Elegir la más reciente por ticket
+                                candidates.sort(key=lambda q: getattr(q, 'ticket', 0), reverse=True)
+                                chosen = candidates[0]
+                        except Exception:
+                            chosen = None
+
+                    # 4) Fallback: si solo hay una posición, úsala; si varias, la más reciente por ticket
+                    if chosen is None:
+                        if len(positions) == 1:
+                            chosen = positions[0]
+                        else:
+                            try:
+                                chosen = sorted(positions, key=lambda p: getattr(p, 'ticket', 0), reverse=True)[0]
+                            except Exception:
+                                chosen = positions[0]
+
+                    if chosen and getattr(chosen, 'ticket', None):
+                        auto_ticket = int(chosen.ticket)
+                        self.logger.info(
+                            "Usando ticket detectado automáticamente para cierre",
+                            extra={"symbol": symbol, "ticket": auto_ticket, "magic": getattr(chosen, 'magic', None)}
+                        )
+                        self.order_manager.close_position(ticket=auto_ticket)
+                    else:
+                        self.logger.warning("Sin 'ticket' en decisión y no se pudo inferir de posiciones; cierre manual requerido")
+                else:
+                    # Sin ticket explícito ni acceso a posiciones, evitar cerrar en masa por seguridad
+                    self.logger.warning("Sin 'ticket' en decisión; cierre manual requerido")
         except Exception as e:
             self.logger.error(
                 f"Error al cerrar posición en {symbol}: {e}",
