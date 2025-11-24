@@ -28,6 +28,9 @@ from src.core.operations_repository import (
 from src.core.order_manager import OrderRequest, OrderType
 from src.core.position_manager import PositionManager
 from src.core.vertex_ai_client import VertexAIClient, VertexAIConfig
+from src.core.enhanced_magic_number_generator import EnhancedMagicNumberGenerator
+from src.core.agent_variant_codes import resolve_codes
+from src.core.sequence_manager import SequenceManager
 from src.core.vwap_prompt_builder import MarketContext
 
 
@@ -77,6 +80,10 @@ class IntradayBot1Strategy(BaseBotOperations):
         
         # Inicializar _position_manager (lazy loading)
         self._position_manager = None
+
+        # Enhanced magic v2 helpers
+        self._magic_v2 = EnhancedMagicNumberGenerator()
+        self._seq_manager = SequenceManager()
         
         # Configurar logger específico del bot con directorio propio
         from src.core.logger import LogConfig, LogLevel
@@ -362,6 +369,18 @@ class IntradayBot1Strategy(BaseBotOperations):
             if abs(current_position['sl'] - sl_inicial) > pip_value * 0.1:
                 sl_ajustado_nota = f" (⚠️ SL inicial: {sl_inicial}, ajustado a: {current_position['sl']})"
             
+            # Recuperar riesgo persistido (si existe operación)
+            riesgo_linea = ""
+            if current_position.get('magic') and self.operations_repo:
+                try:
+                    op = self.operations_repo.get_operation_by_magic_number(int(current_position['magic']))
+                    if op:
+                        riesgo_linea = f"- Riesgo Objetivo: {op.risk_percentage:.2f}% (~${op.risk_amount:.2f})\n"
+                except Exception:
+                    pass
+            if not riesgo_linea:
+                riesgo_linea = f"- Riesgo Objetivo: {self.config.risk_per_trade:.2f}% (config)\n"
+
             position_text = f"""POSICIÓN ACTIVA: {current_position['type']} @ {current_position['price_open']}
 - Volumen: {current_position['volume']} lotes
 - PnL Actual: ${current_position['profit']:.2f} USD ({current_position['pnl_pips']:.1f} pips = {pnl_r:.2f}R)
@@ -370,7 +389,7 @@ class IntradayBot1Strategy(BaseBotOperations):
 - Precio Actual: {current_position['price_current']}
 - Duración: {current_position.get('duration', 'N/A')}
 - Riesgo Inicial (1R): {risk_pips:.1f} pips (basado en SL inicial: {sl_inicial})
-
+{riesgo_linea}
 ⚠️ PRIORIDAD: Gestiona esta posición. Evalúa si debe CERRARSE, AJUSTAR_SL_TP o MANTENERSE."""
         else:
             position_text = """POSICIÓN ACTUAL: NONE (Sin posición abierta)
@@ -949,15 +968,43 @@ class IntradayBot1Strategy(BaseBotOperations):
             SL inicial o None si no se encuentra
         """
         try:
-            # Buscar operación abierta en BD por símbolo y magic number
-            operation = self.operations_repo.get_open_operation_for_symbol_and_magic(
-                symbol=symbol,
-                magic_number=self.config.bot_id
-            )
-            
-            if operation and operation.stop_loss_initial:
-                return operation.stop_loss_initial
-            
+            # Intentar obtener la posición actual y, con su magic, buscar en BD
+            positions = self.mt5_connection.get_positions(symbol=symbol) if self.mt5_connection else []
+            current_magic = None
+
+            if positions:
+                # Resolver códigos v2 de este agente
+                family_id, strategy_id, agent_variant_id = resolve_codes(
+                    ai_model=self.config.ai_model, strategy_name="INTRADAY", data_mode="raw"
+                )
+                for pos in positions:
+                    try:
+                        comp = self._magic_v2.decode(int(pos.magic))
+                        if (
+                            comp.family_id == family_id and
+                            comp.strategy_id == strategy_id and
+                            comp.agent_id == agent_variant_id
+                        ):
+                            current_magic = int(pos.magic)
+                            break
+                    except Exception:
+                        # Fallback legacy por primer dígito mapeado
+                        try:
+                            mapped_bot_id = self.config.bot_id - 100 if self.config.bot_id >= 101 else self.config.bot_id
+                            magic_str = str(pos.magic)
+                            if magic_str and int(magic_str[0]) == mapped_bot_id:
+                                current_magic = int(pos.magic)
+                                break
+                        except Exception:
+                            continue
+
+            if current_magic is None:
+                return None
+
+            operation = self.operations_repo.get_operation_by_magic_number(current_magic)
+            # Verificar que el símbolo almacenado coincide; si no, fue una colisión legacy
+            if operation and operation.symbol == symbol and getattr(operation, 'stop_loss_initial', None):
+                return float(operation.stop_loss_initial)
             return None
             
         except Exception as e:
@@ -986,27 +1033,37 @@ class IntradayBot1Strategy(BaseBotOperations):
                     # Si no hay conexión MT5, asumir que no hay posiciones
                     return False
             
-            # Usar la property position_manager para asegurar inicialización lazy
-            # Obtener TODAS las posiciones del símbolo y filtrar por bot_id
             all_positions = self.mt5_connection.get_positions(symbol=symbol)
-            
-            # Filtrar posiciones que pertenecen a este bot
-            # Magic number formato: BIISSSS (bot_id en primeros 1-3 dígitos)
+
+            # Resolver códigos v2 de este agente (default data_mode='raw')
+            family_id, strategy_id, agent_variant_id = resolve_codes(
+                ai_model=self.config.ai_model, strategy_name="INTRADAY", data_mode="raw"
+            )
+
             bot_positions = []
             for pos in all_positions:
-                # Extraer bot_id del magic number
-                magic_str = str(pos.magic)
-                if len(magic_str) >= 1:
-                    # Para bot_id 1-5: magic empieza con ese dígito
-                    # Para bot_id 101-106: magic empieza con esos 3 dígitos
-                    if self.config.bot_id < 10:
-                        pos_bot_id = int(magic_str[0])
-                    else:
-                        pos_bot_id = int(magic_str[:3]) if len(magic_str) >= 3 else 0
-                    
-                    if pos_bot_id == self.config.bot_id:
+                try:
+                    # Intentar decodificar como v2
+                    comp = self._magic_v2.decode(int(pos.magic))
+                    if (
+                        comp.family_id == family_id and
+                        comp.strategy_id == strategy_id and
+                        comp.agent_id == agent_variant_id
+                    ):
                         bot_positions.append(pos)
-            
+                        continue
+                except Exception:
+                    # Legacy o inválido: fallback al mapeo por bot_id (v1)
+                    pass
+                # Fallback legacy por primer dígito mapeado
+                try:
+                    mapped_bot_id = self.config.bot_id - 100 if self.config.bot_id >= 101 else self.config.bot_id
+                    magic_str = str(pos.magic)
+                    if magic_str and int(magic_str[0]) == mapped_bot_id:
+                        bot_positions.append(pos)
+                except Exception:
+                    continue
+
             has_position = len(bot_positions) > 0
             
             self.logger.debug(
@@ -1016,6 +1073,9 @@ class IntradayBot1Strategy(BaseBotOperations):
                     "has_position": has_position,
                     "all_positions_count": len(all_positions),
                     "bot_positions_count": len(bot_positions),
+                    "family_id": family_id,
+                    "strategy_id": strategy_id,
+                    "agent_variant_id": agent_variant_id,
                 },
             )
             
@@ -1050,21 +1110,33 @@ class IntradayBot1Strategy(BaseBotOperations):
             - ticket: Ticket de la orden
         """
         try:
-            # Obtener TODAS las posiciones del símbolo
             all_positions = self.mt5_connection.get_positions(symbol=symbol)
-            
-            # Filtrar posiciones que pertenecen a este bot
+
+            # Filtrar por Magic v2 de este agente (con fallback legacy)
+            family_id, strategy_id, agent_variant_id = resolve_codes(
+                ai_model=self.config.ai_model, strategy_name="INTRADAY", data_mode="raw"
+            )
             bot_positions = []
             for pos in all_positions:
-                magic_str = str(pos.magic)
-                if len(magic_str) >= 1:
-                    if self.config.bot_id < 10:
-                        pos_bot_id = int(magic_str[0])
-                    else:
-                        pos_bot_id = int(magic_str[:3]) if len(magic_str) >= 3 else 0
-                    
-                    if pos_bot_id == self.config.bot_id:
+                try:
+                    comp = self._magic_v2.decode(int(pos.magic))
+                    if (
+                        comp.family_id == family_id and
+                        comp.strategy_id == strategy_id and
+                        comp.agent_id == agent_variant_id
+                    ):
                         bot_positions.append(pos)
+                        continue
+                except Exception:
+                    pass
+                # Fallback legacy por primer dígito mapeado
+                try:
+                    mapped_bot_id = self.config.bot_id - 100 if self.config.bot_id >= 101 else self.config.bot_id
+                    magic_str = str(pos.magic)
+                    if magic_str and int(magic_str[0]) == mapped_bot_id:
+                        bot_positions.append(pos)
+                except Exception:
+                    continue
             
             if not bot_positions:
                 self.logger.warning(
@@ -1108,11 +1180,29 @@ class IntradayBot1Strategy(BaseBotOperations):
             risk_points = abs(position.price_open - position.sl) if position.sl > 0 else 0.0
             pnl_r = pnl_points / risk_points if risk_points > 0 else 0.0
             
-            # Calcular duración de la posición
-            if hasattr(position.time_open, 'timestamp'):
-                duration_seconds = (datetime.now().timestamp() - position.time_open.timestamp())
+            # Calcular duración de la posición (manejar ausencia de time_open)
+            # MetaTrader5 positions suelen tener 'time' (segundos epoch)
+            open_time_raw = None
+            if hasattr(position, 'time_open'):
+                open_time_raw = getattr(position, 'time_open')
+            elif hasattr(position, 'time'):
+                open_time_raw = getattr(position, 'time')
+
+            open_time_dt = None
+            if isinstance(open_time_raw, (int, float)):
+                try:
+                    open_time_dt = datetime.fromtimestamp(open_time_raw)
+                except Exception:
+                    open_time_dt = datetime.now()
+            elif hasattr(open_time_raw, 'timestamp'):
+                try:
+                    open_time_dt = datetime.fromtimestamp(open_time_raw.timestamp())
+                except Exception:
+                    open_time_dt = datetime.now()
             else:
-                duration_seconds = 0
+                open_time_dt = datetime.now()
+
+            duration_seconds = (datetime.now() - open_time_dt).total_seconds()
             
             hours = int(duration_seconds // 3600)
             minutes = int((duration_seconds % 3600) // 60)
@@ -1129,9 +1219,10 @@ class IntradayBot1Strategy(BaseBotOperations):
                 "profit": position.profit,  # USD
                 "pnl_r": round(pnl_r, 2),
                 "volume": position.volume,
-                "open_time": position.time_open.isoformat() if hasattr(position.time_open, 'isoformat') else str(position.time_open),
+                "open_time": open_time_dt.isoformat(),
                 "ticket": position.ticket,
                 "duration": duration_str,
+                "magic": getattr(position, 'magic', 0),
             }
             
             self.logger.info(
@@ -1177,56 +1268,197 @@ class IntradayBot1Strategy(BaseBotOperations):
             stop_loss = decision.get("stop_loss")
             take_profit = decision.get("take_profit") or decision.get("take_profit_1")
             entry_price = decision.get("precio_entrada")
-            
-            # Normalizar dirección: "LONG" -> "buy", "SHORT" -> "sell"
+
             if direccion_raw in ("long", "comprar"):
                 direction = "buy"
             elif direccion_raw in ("short", "vender"):
                 direction = "sell"
+            elif direccion_raw in ("buy", "sell"):
+                direction = direccion_raw
             else:
-                direction = direccion_raw  # Ya está en formato correcto (buy/sell)
-            
+                self.logger.warning(f"Dirección inválida/ausente en decisión: '{direccion_raw}'")
+                return
+
             if not stop_loss or not take_profit:
                 self.logger.warning("Decisión sin SL/TP válidos; no se abrirá operación")
                 return
-            
+
+            if not self.mt5_connection or not self.order_manager:
+                self.logger.error("Gestores de órdenes no inicializados")
+                return
+
+            # Verificar símbolo disponible y extraer specs
+            try:
+                symbol_info = self.mt5_connection.get_symbol_info(symbol)
+                if symbol_info is None:
+                    self.logger.error(f"Símbolo {symbol} no está disponible en MT5")
+                    return
+            except ValueError as e:
+                self.logger.error(f"Error obteniendo información del símbolo {symbol}: {e}")
+                return
+
+            if self.symbol_spec_extractor is None:
+                self.logger.error("SymbolSpecificationExtractor no inicializado")
+                return
+            symbol_spec = self.symbol_spec_extractor.get_symbol_specification(symbol)
+
             # Precio actual si no hay entrada explícita
             tick = self.mt5_connection._mt5.symbol_info_tick(symbol)
             if entry_price is None and tick is not None:
                 entry_price = tick.ask if direction == "buy" else tick.bid
-            
-            # 2. Crear nueva decisión con dirección normalizada para el método base
-            normalized_decision = decision.copy()
-            normalized_decision["direccion"] = direction  # "buy" o "sell"
-            
-            # 3. Ejecutar orden a través del método base (enviará a MT5)
-            super()._execute_open_position(symbol, normalized_decision)
-            
-            # 3. Registrar en base de datos con valores iniciales
-            # Verificar si la orden se ejecutó (buscar posición recién abierta)
+            if entry_price is None:
+                self.logger.error(f"No se pudo determinar precio de entrada para {symbol}")
+                return
+
+            # 2. Resolver codes v2 (data_mode='raw' por defecto) y secuencia
+            family_id, strategy_id, agent_variant_id = resolve_codes(
+                ai_model=self.config.ai_model, strategy_name="INTRADAY", data_mode="raw"
+            )
+            seq = self._seq_manager.next_sequence(
+                repo=self.operations_repo,
+                family_id=family_id,
+                strategy_id=strategy_id,
+                agent_variant_id=agent_variant_id,
+                symbol=symbol,
+            )
+
+            # 3. Generar magic v2
+            magic_v2 = self._magic_v2.generate(
+                family_id=family_id,
+                strategy_id=strategy_id,
+                order_type="market",
+                agent_id=agent_variant_id,
+                sequence=seq,
+            )
+
+            # 4. Calcular lote dinámico según riesgo (IA > config > mínimo)
+            account_info = self.mt5_connection.get_account_info()
+            balance = float(getattr(account_info, 'balance', 0.0))
+            riesgo_ia = decision.get("riesgo_porcentaje") or decision.get("riesgo_pct")
+            risk_pct = float(riesgo_ia) if riesgo_ia else float(self.config.risk_per_trade)
+            lot_size_calc = max(symbol_spec.volume_min, symbol_spec.volume_step)
+            risk_amount = balance * (risk_pct / 100.0)
+            try:
+                if self.position_sizer:
+                    from src.core.position_sizer import RiskParameters
+                    rp = RiskParameters(
+                        account_balance=balance,
+                        risk_percentage=risk_pct,
+                        entry_price=float(entry_price),
+                        stop_loss=float(stop_loss),
+                        symbol_spec=symbol_spec
+                    )
+                    ps_result = self.position_sizer.calculate_lot_size(rp)
+                    lot_size_calc = ps_result.lot_size
+                    # Recalcular riesgo real usando lote ajustado
+                    risk_amount = ps_result.risk_amount
+            except Exception as e:
+                self.logger.warning(
+                    f"Fallo cálculo lote dinámico, usando mínimo: {e}",
+                    extra={"symbol": symbol, "error": str(e)}
+                )
+            # 5. Enviar orden Market con lote dinámico
+            order_type = OrderType.BUY if direction == "buy" else OrderType.SELL
+            request = OrderRequest(
+                symbol=symbol,
+                order_type=order_type,
+                volume=round(lot_size_calc, 2),
+                price=float(entry_price),
+                sl=float(stop_loss),
+                tp=float(take_profit),
+                magic=magic_v2,
+                # MT5 restringe comentario (<31 chars, sin caracteres inválidos). Usamos formato corto.
+                comment=f"B{self.config.bot_id}_INTRA"[:15]
+            )
+            result = self.order_manager.send_market_order(request)
+            if not result or not getattr(result, 'order', None):
+                # Log detallado de fallo
+                trade_stops_level = getattr(symbol_info, 'trade_stops_level', None)
+                point = getattr(symbol_info, 'point', None)
+                min_stop_distance = None
+                if trade_stops_level is not None and point is not None:
+                    try:
+                        min_stop_distance = trade_stops_level * point
+                    except Exception:
+                        min_stop_distance = None
+                sl_distance_points = abs(entry_price - float(stop_loss)) if stop_loss else None
+                tp_distance_points = abs(float(take_profit) - entry_price) if take_profit else None
+                free_margin = getattr(account_info, 'margin_free', None)
+                last_error = None
+                try:
+                    if hasattr(self.mt5_connection, '_mt5') and hasattr(self.mt5_connection._mt5, 'last_error'):
+                        last_error = self.mt5_connection._mt5.last_error()
+                except Exception:
+                    last_error = None
+                self.logger.error(
+                    "Fallo envío orden Market (None)",
+                    extra={
+                        'symbol': symbol,
+                        'direction': direction,
+                        'entry_price': entry_price,
+                        'stop_loss': stop_loss,
+                        'take_profit': take_profit,
+                        'risk_pct': risk_pct,
+                        'risk_amount': risk_amount,
+                        'lot_size_attempt': lot_size_calc,
+                        'trade_stops_level': trade_stops_level,
+                        'min_stop_distance_points': min_stop_distance,
+                        'sl_distance_points': sl_distance_points,
+                        'tp_distance_points': tp_distance_points,
+                        'free_margin': free_margin,
+                        'last_error': last_error,
+                        'magic_v2': magic_v2,
+                        'sequence': seq,
+                    }
+                )
+                return
+            else:
+                self.logger.info(
+                    "Orden Market enviada (v2)",
+                    extra={
+                        'ticket': result.order,
+                        'price': result.price,
+                        'volume': result.volume,
+                        'magic_v2': magic_v2,
+                        'risk_pct': risk_pct,
+                        'risk_amount': risk_amount,
+                    }
+                )
+
+            # 5. Registrar en base de datos con valores iniciales
             if not self.position_manager:
                 self.logger.warning("PositionManager no disponible, no se registrará en BD")
                 return
-            
-            # Buscar posición por símbolo (get_positions_by_symbol retorna lista)
+
             positions = self.position_manager.get_positions_by_symbol(symbol)
-            
             if not positions:
                 self.logger.warning(
-                    f"No se encontró posición recién abierta para {symbol}, "
-                    "no se registrará en BD"
+                    f"No se encontró posición recién abierta para {symbol}, no se registrará en BD"
                 )
                 return
-            
-            # Tomar la primera posición (asumimos que es la recién abierta)
-            position = positions[0]
-            
+
+            # Seleccionar la posición recién abierta buscando magic_v2
+            position_match = None
+            for pos in positions:
+                if int(getattr(pos, 'magic', 0)) == int(magic_v2):
+                    position_match = pos
+                    break
+            if position_match is None:
+                # Fallback: primera posición
+                position_match = positions[0]
+                self.logger.warning(
+                    "No se encontró posición con magic_v2 esperado; usando primera posición",
+                    extra={"expected_magic": magic_v2, "used_magic": position_match.magic}
+                )
+            position = position_match
+
             # 4. Crear registro en operations_repository
             db_direction = Direction.BUY if direction == "buy" else Direction.SELL
             
-            # Calcular lot size y risk (simplificado - usar valores de posición MT5)
+            # Calcular lot size y riesgo (usar resultado dinámico ya aplicado)
             lot_size = float(position.volume)
-            risk_pct = float(self.config.risk_per_trade)
+            # risk_pct ya calculado arriba
+            risk_amount = risk_amount
             
             # Generar operation_id único
             operation_id = generate_operation_id(
@@ -1264,7 +1496,7 @@ class IntradayBot1Strategy(BaseBotOperations):
             
             # Crear operación en BD con valores recalculados
             operation = self.operations_repo.create_operation(
-                magic_number=position.magic,  # ✅ Usar magic number, no ticket
+                magic_number=position.magic,  # Usar magic v2 aplicado a la orden
                 bot_id=self.config.bot_id,
                 ia_id=1,  # Usar 1 como default (ia_config_id no está en BotConfig)
                 order_type=DBOrderType.MARKET,
@@ -1278,6 +1510,7 @@ class IntradayBot1Strategy(BaseBotOperations):
                 take_profit_initial=actual_tp,  # 🔑 Valor inicial de TP (con precio real)
                 lot_size=lot_size,
                 risk_percentage=risk_pct,
+                risk_amount=risk_amount,
                 status=OperationStatus.OPEN,
                 conversation_id=operation_id,
             )
