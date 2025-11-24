@@ -83,6 +83,7 @@ class Operation:
     stop_loss_initial: Optional[float] = None  # SL al momento de apertura (para trailing stop)
     take_profit_initial: Optional[float] = None  # TP al momento de apertura
     lot_size: float = 0.0
+    risk_amount: float = 0.0  # Monto de riesgo en dinero (balance * % / 100)
     risk_percentage: float = 0.0
     
     # Estado y resultados
@@ -116,6 +117,7 @@ class Operation:
             'take_profit': self.take_profit,
             'lot_size': self.lot_size,
             'risk_percentage': self.risk_percentage,
+            'risk_amount': self.risk_amount,
             'status': self.status.value if isinstance(self.status, OperationStatus) else self.status,
             'profit_loss': self.profit_loss,
             'open_time': self.open_time.isoformat() if self.open_time else None,
@@ -193,6 +195,7 @@ class OperationsRepository:
         stop_loss: float,
         take_profit: float,
         lot_size: float,
+        risk_amount: float,
         risk_percentage: float,
         status: OperationStatus,
         actual_entry_price: Optional[float] = None,
@@ -217,6 +220,7 @@ class OperationsRepository:
             stop_loss: Precio de stop loss
             take_profit: Precio de take profit
             lot_size: Tamaño del lote
+            risk_amount: Monto de riesgo monetario (balance * riesgo% / 100)
             risk_percentage: Porcentaje de riesgo
             status: Estado de la operación
             actual_entry_price: Precio real de entrada (opcional)
@@ -269,17 +273,17 @@ class OperationsRepository:
                         magic_number, bot_id, ia_id, order_type, symbol, direction,
                         suggested_price, actual_entry_price, stop_loss, take_profit,
                         stop_loss_initial, take_profit_initial,
-                        lot_size, risk_percentage, status, profit_loss,
+                        lot_size, risk_percentage, risk_amount, status, profit_loss,
                         open_time, close_time, conversation_id,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     magic_number, bot_id, ia_id,
                     order_type.value, symbol, direction.value,
                     suggested_price, actual_entry_price,
                     stop_loss, take_profit,
                     stop_loss_initial, take_profit_initial,
-                    lot_size, risk_percentage,
+                    lot_size, risk_percentage, risk_amount,
                     status.value, profit_loss,
                     open_time.isoformat() if open_time else None,
                     close_time.isoformat() if close_time else None,
@@ -672,6 +676,7 @@ class OperationsRepository:
                         take_profit_initial REAL,
                         lot_size REAL NOT NULL,
                         risk_percentage REAL NOT NULL,
+                        risk_amount REAL NOT NULL DEFAULT 0.0,
                         
                         -- Estado y resultados
                         status TEXT NOT NULL,
@@ -687,12 +692,16 @@ class OperationsRepository:
                         -- Timestamps
                         created_at TEXT NOT NULL,
                         updated_at TEXT NOT NULL,
-                        
                         CONSTRAINT chk_order_type CHECK (order_type IN ('market', 'limit')),
                         CONSTRAINT chk_direction CHECK (direction IN ('BUY', 'SELL')),
                         CONSTRAINT chk_status CHECK (status IN ('open', 'closed', 'pending'))
                     )
                 """)
+                # Migración ligera: añadir columna risk_amount si falta (bases existentes)
+                cursor.execute("PRAGMA table_info(operations)")
+                cols = {r[1] for r in cursor.fetchall()}
+                if 'risk_amount' not in cols:
+                    cursor.execute("ALTER TABLE operations ADD COLUMN risk_amount REAL NOT NULL DEFAULT 0.0")
                 
                 # Crear índices para consultas eficientes
                 cursor.execute("""
@@ -753,6 +762,7 @@ class OperationsRepository:
             take_profit_initial=row_dict.get('take_profit_initial'),  # Backwards compatible
             lot_size=row_dict['lot_size'],
             risk_percentage=row_dict['risk_percentage'],
+            risk_amount=row_dict.get('risk_amount', 0.0),
             status=OperationStatus(row_dict['status']),
             profit_loss=row_dict['profit_loss'],
             open_time=datetime.fromisoformat(row_dict['open_time']) if row_dict['open_time'] else None,
