@@ -9,7 +9,13 @@
 - D1: Familia IA (1=Gemini, 2=GPT, 3=Grok)
 - D2: Estrategia (1=Intraday, 2=VWAP, 3=Swing)
 - D3: Tipo (0=Market, 1=Limit)
-- D4: Agente dentro de estrategia (Intraday: 1=Gemini 2.5 Pro, 2=Gemini 3 Pro, 3=GPT-4, 4=Grok)
+- D4: Variante de Agente (modelo+modalidad). Intraday/Gemini (ejemplo):
+   - 1 = Gemini 2.5 Pro (raw)
+   - 2 = Gemini 2.5 Pro (images)
+   - 3 = Gemini 2.5 Pro (hybrid)
+   - 4 = Gemini 3 Pro (raw)
+   - 5 = Gemini 3 Pro (images)
+   - 6 = Gemini 3 Pro (hybrid)
 - D5–D6: Sequence por símbolo (00–99) para permitir múltiples órdenes a lo largo del tiempo evitando colisiones.
 
 Notas:
@@ -58,7 +64,9 @@ Notas:
 ## Asignación de códigos iniciales
 - Familia IA: 1=Gemini, 2=GPT, 3=Grok
 - Estrategia: 1=Intraday, 2=VWAP, 3=Swing
-- Agente Intraday: 1=Gemini 2.5 Pro, 2=Gemini 3 Pro, 3=GPT-4, 4=Grok
+- Variante Agente Intraday/Gemini:
+   - 1=G2.5 raw, 2=G2.5 images, 3=G2.5 hybrid,
+   - 4=G3 raw, 5=G3 images, 6=G3 hybrid
 
 ## Criterios de aceptación
 - Una sola posición abierta por símbolo para cada (estrategia, agente).
@@ -66,8 +74,8 @@ Notas:
 - Compatibilidad: otros bots continúan con v1.
 
 ## Tracking de tareas
-- [ ] 1. Crear EnhancedMagicNumberGenerator (v2)
-- [ ] 2. Añadir tests unitarios v2
+- [x] 1. Crear EnhancedMagicNumberGenerator (v2)
+- [x] 2. Añadir tests unitarios v2
 - [ ] 3. Implementar SequenceManager (por símbolo)
 - [ ] 4. Verificación open-position por (estrategia, agente, símbolo)
 - [ ] 5. Integrar en Intraday Gemini 3 Pro
