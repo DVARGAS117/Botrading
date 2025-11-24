@@ -47,6 +47,7 @@ Responde ÚNICAMENTE con este objeto JSON. No incluyas markdown (```json) ni tex
   "direccion": "LONG | SHORT | null",
   "stop_loss": número (Precio FINAL sugerido para el SL. Si no cambia, repite el actual),
   "take_profit": número (Precio FINAL sugerido para el TP. Si no cambia, repite el actual),
+  "riesgo_porcentaje": número (Porcentaje de riesgo deseado para la operación nueva o ajuste; rango sugerido 0.3–1.5 intradía. Si acción no abre nueva posición puedes repetir el existente),
   "confianza": número (0-100),
   "estrategia_usada": "A | B | C | NONE",
   "diagnostico_mercado": "TENDENCIA_ALCISTA | TENDENCIA_BAJISTA | LATERAL | COMPRIMIDO"

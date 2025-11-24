@@ -366,7 +366,18 @@ class IntradayBot1Strategy(BaseBotOperations):
             
             # Determinar si SL fue ajustado
             sl_ajustado_nota = ""
-            if abs(current_position['sl'] - sl_inicial) > pip_value * 0.1:
+            sl_diff = abs(current_position['sl'] - sl_inicial)
+            self.logger.info(
+                f"Verificación ajuste SL",
+                extra={
+                    "symbol": symbol,
+                    "sl_inicial": sl_inicial,
+                    "sl_actual": current_position['sl'],
+                    "diff": sl_diff,
+                    "umbral": pip_value * 0.1,
+                },
+            )
+            if sl_diff > pip_value * 0.1:
                 sl_ajustado_nota = f" (⚠️ SL inicial: {sl_inicial}, ajustado a: {current_position['sl']})"
             
             # Recuperar riesgo persistido (si existe operación)
@@ -566,7 +577,9 @@ class IntradayBot1Strategy(BaseBotOperations):
             
             # Determinar si SL fue ajustado
             sl_ajustado_nota = ""
-            if abs(current_position['sl'] - sl_inicial) > pip_value * 0.1:  # Diferencia significativa
+            sl_diff = abs(current_position['sl'] - sl_inicial)
+            print(f"SL_CHECK v2: sl_inicial={sl_inicial} sl_actual={current_position['sl']} diff={sl_diff} umbral={pip_value * 0.1}")
+            if sl_diff > pip_value * 0.1:  # Diferencia significativa
                 sl_ajustado_nota = f" (⚠️ SL inicial: {sl_inicial}, ajustado a: {current_position['sl']})"
             
             position_text = f"""POSICIÓN ACTIVA: {current_position['type']} @ {current_position['price_open']}
@@ -968,43 +981,58 @@ class IntradayBot1Strategy(BaseBotOperations):
             SL inicial o None si no se encuentra
         """
         try:
-            # Intentar obtener la posición actual y, con su magic, buscar en BD
             positions = self.mt5_connection.get_positions(symbol=symbol) if self.mt5_connection else []
-            current_magic = None
-
-            if positions:
-                # Resolver códigos v2 de este agente
-                family_id, strategy_id, agent_variant_id = resolve_codes(
-                    ai_model=self.config.ai_model, strategy_name="INTRADAY", data_mode="raw"
-                )
-                for pos in positions:
-                    try:
-                        comp = self._magic_v2.decode(int(pos.magic))
-                        if (
-                            comp.family_id == family_id and
-                            comp.strategy_id == strategy_id and
-                            comp.agent_id == agent_variant_id
-                        ):
-                            current_magic = int(pos.magic)
-                            break
-                    except Exception:
-                        # Fallback legacy por primer dígito mapeado
-                        try:
-                            mapped_bot_id = self.config.bot_id - 100 if self.config.bot_id >= 101 else self.config.bot_id
-                            magic_str = str(pos.magic)
-                            if magic_str and int(magic_str[0]) == mapped_bot_id:
-                                current_magic = int(pos.magic)
-                                break
-                        except Exception:
-                            continue
-
-            if current_magic is None:
+            if not positions:
                 return None
 
-            operation = self.operations_repo.get_operation_by_magic_number(current_magic)
-            # Verificar que el símbolo almacenado coincide; si no, fue una colisión legacy
-            if operation and operation.symbol == symbol and getattr(operation, 'stop_loss_initial', None):
-                return float(operation.stop_loss_initial)
+            family_id, strategy_id, agent_variant_id = resolve_codes(
+                ai_model=self.config.ai_model, strategy_name="INTRADAY", data_mode="raw"
+            )
+
+            candidate_operations: list = []
+
+            for pos in positions:
+                candidate_magic: Optional[int] = None
+                raw_magic = int(pos.magic)
+                try:
+                    comp = self._magic_v2.decode(raw_magic)
+                    if (
+                        comp.family_id == family_id and
+                        comp.strategy_id == strategy_id and
+                        comp.agent_id == agent_variant_id
+                    ):
+                        candidate_magic = raw_magic
+                except Exception:
+                    try:
+                        mapped_bot_id = self.config.bot_id - 100 if self.config.bot_id >= 101 else self.config.bot_id
+                        magic_str = str(raw_magic)
+                        if magic_str and int(magic_str[0]) == mapped_bot_id:
+                            candidate_magic = raw_magic
+                    except Exception:
+                        candidate_magic = None
+
+                if candidate_magic is None:
+                    continue
+
+                op = self.operations_repo.get_operation_by_magic_number(candidate_magic)
+                if not op or op.symbol != symbol:
+                    continue
+                candidate_operations.append(op)
+
+            if candidate_operations:
+                # Seleccionar la más reciente por magic_number (secuencia global monotónica)
+                candidate_operations.sort(key=lambda o: o.magic_number, reverse=True)
+                chosen = candidate_operations[0]
+                initial_sl = getattr(chosen, 'stop_loss_initial', None)
+                return float(initial_sl if initial_sl is not None else chosen.stop_loss)
+
+            # Fallback: listar operaciones abiertas por símbolo y tomar la más reciente
+            open_ops = self.operations_repo.list_operations(status=OperationStatus.OPEN, symbol=symbol, limit=10)
+            if open_ops:
+                open_ops.sort(key=lambda o: o.magic_number, reverse=True)
+                chosen = open_ops[0]
+                initial_sl = getattr(chosen, 'stop_loss_initial', None)
+                return float(initial_sl if initial_sl is not None else chosen.stop_loss)
             return None
             
         except Exception as e:
@@ -1160,8 +1188,15 @@ class IntradayBot1Strategy(BaseBotOperations):
                     "duration": "0m",
                 }
             
-            # Tomar la primera posición (debería haber solo una por símbolo)
-            position = bot_positions[0]
+            # Seleccionar la posición más reciente (mayor magic_number o ticket)
+            try:
+                position = sorted(
+                    bot_positions,
+                    key=lambda p: (getattr(p, 'magic', 0), getattr(p, 'ticket', 0)),
+                    reverse=True
+                )[0]
+            except Exception:
+                position = bot_positions[0]
             
             # Determinar tipo de posición
             position_type = "LONG" if position.type == 0 else "SHORT"  # 0=BUY, 1=SELL
@@ -1469,17 +1504,10 @@ class IntradayBot1Strategy(BaseBotOperations):
             # Usar precio real de ejecución para todos los cálculos
             actual_price = float(position.price_open)
             
-            # Recalcular SL/TP basado en precio real de ejecución (más preciso)
-            # Para BUY: SL por debajo, TP por encima
-            # Para SELL: SL por encima, TP por debajo
-            if direction == "buy":
-                # SL: precio_real - riesgo, TP: precio_real + objetivo
-                actual_sl = actual_price - (200 * 0.00001)  # 200 pips de riesgo
-                actual_tp = actual_price + (400 * 0.00001)  # 400 pips de objetivo
-            else:
-                # SL: precio_real + riesgo, TP: precio_real - objetivo
-                actual_sl = actual_price + (200 * 0.00001)
-                actual_tp = actual_price - (400 * 0.00001)
+            # Usar directamente los niveles enviados en la orden para mantener consistencia
+            # entre posición MT5 y registro en BD (evita nota de ajuste inmediata en prompt).
+            actual_sl = float(position.sl) if position.sl else float(stop_loss)
+            actual_tp = float(position.tp) if position.tp else float(take_profit)
             
             self.logger.info(
                 f"Registrando operación en BD: {operation_id}",
@@ -1489,8 +1517,8 @@ class IntradayBot1Strategy(BaseBotOperations):
                     "execution_price": actual_price,
                     "calculated_sl": actual_sl,
                     "calculated_tp": actual_tp,
-                    "stop_loss_initial": actual_sl,  # Guardar SL calculado con precio real
-                    "take_profit_initial": actual_tp,  # Guardar TP calculado con precio real
+                    "stop_loss_initial": actual_sl,  # Guardar SL original de la orden
+                    "take_profit_initial": actual_tp,  # Guardar TP original de la orden
                 }
             )
             
@@ -1504,10 +1532,10 @@ class IntradayBot1Strategy(BaseBotOperations):
                 direction=db_direction,
                 suggested_price=float(entry_price or actual_price),  # Precio sugerido (tick)
                 actual_entry_price=actual_price,  # Precio real de ejecución
-                stop_loss=actual_sl,  # SL recalculado con precio real
-                take_profit=actual_tp,  # TP recalculado con precio real
-                stop_loss_initial=actual_sl,  # 🔑 Valor inicial de SL (con precio real)
-                take_profit_initial=actual_tp,  # 🔑 Valor inicial de TP (con precio real)
+                stop_loss=actual_sl,  # SL original de la orden
+                take_profit=actual_tp,  # TP original de la orden
+                stop_loss_initial=actual_sl,  # 🔑 Valor inicial de SL (original orden)
+                take_profit_initial=actual_tp,  # 🔑 Valor inicial de TP (original orden)
                 lot_size=lot_size,
                 risk_percentage=risk_pct,
                 risk_amount=risk_amount,
@@ -1525,6 +1553,71 @@ class IntradayBot1Strategy(BaseBotOperations):
                     "take_profit_initial": operation.take_profit_initial,
                 }
             )
+
+            # Reconciliar SL/TP si el broker los ajustó (p.ej. niveles mínimos)
+            try:
+                import time
+                max_attempts = 5
+                for attempt in range(max_attempts):
+                    time.sleep(1)
+                    refreshed_positions = self.mt5_connection.get_positions(symbol=symbol) if self.mt5_connection else []
+                    target = None
+                    for rp in refreshed_positions:
+                        if int(getattr(rp, 'magic', 0)) == int(position.magic):
+                            target = rp
+                            break
+                    if not target:
+                        continue
+                    broker_sl = float(target.sl)
+                    broker_tp = float(target.tp)
+                    pip_value = 0.01 if "JPY" in symbol else 0.0001
+                    sl_diff = abs(broker_sl - operation.stop_loss)
+                    tp_diff = abs(broker_tp - operation.take_profit)
+                    self.logger.info(
+                        "Verificación reconciliación broker",
+                        extra={
+                            "attempt": attempt + 1,
+                            "symbol": symbol,
+                            "stored_sl": operation.stop_loss,
+                            "broker_sl": broker_sl,
+                            "stored_tp": operation.take_profit,
+                            "broker_tp": broker_tp,
+                            "sl_diff": sl_diff,
+                            "tp_diff": tp_diff,
+                        },
+                    )
+                    updated = False
+                    if sl_diff > pip_value * 0.5:
+                        self.logger.info(
+                            "Reconciliando SL con ajuste broker",
+                            extra={
+                                "symbol": symbol,
+                                "old_sl": operation.stop_loss,
+                                "broker_sl": broker_sl,
+                                "old_sl_initial": operation.stop_loss_initial,
+                            },
+                        )
+                        self.operations_repo.update_operation(operation.id, stop_loss=broker_sl, stop_loss_initial=broker_sl)
+                        updated = True
+                    if tp_diff > pip_value * 0.5:
+                        self.logger.info(
+                            "Reconciliando TP con ajuste broker",
+                            extra={
+                                "symbol": symbol,
+                                "old_tp": operation.take_profit,
+                                "broker_tp": broker_tp,
+                                "old_tp_initial": operation.take_profit_initial,
+                            },
+                        )
+                        self.operations_repo.update_operation(operation.id, take_profit=broker_tp, take_profit_initial=broker_tp)
+                        updated = True
+                    if updated:
+                        break
+            except Exception as rec_e:
+                self.logger.warning(
+                    f"No se pudo reconciliar ajustes broker SL/TP: {rec_e}",
+                    extra={"symbol": symbol, "error": str(rec_e)}
+                )
             
         except Exception as e:
             self.logger.error(
