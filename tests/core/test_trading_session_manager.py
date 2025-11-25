@@ -89,10 +89,9 @@ class TestTradingSessionManagerInit:
         fake_path = Path("nonexistent/config.json")
         manager = TradingSessionManager(config_path=fake_path)
         
-        # Debe crear config por defecto
-        assert len(manager.sessions) == 1
-        assert 'always' in manager.sessions
-        assert manager.sessions['always']['symbols'] == []  # Todos permitidos
+        # Debe crear config por defecto (vacía por seguridad)
+        assert len(manager.sessions) == 0
+        assert manager.global_rules['allow_reevaluation_outside_hours'] is True
     
     def test_init_with_invalid_json(self):
         """Test: Inicialización con JSON inválido usa config por defecto."""
@@ -103,8 +102,8 @@ class TestTradingSessionManagerInit:
         try:
             manager = TradingSessionManager(config_path=temp_path)
             
-            # Debe usar config por defecto
-            assert 'always' in manager.sessions
+            # Debe usar config por defecto (vacía)
+            assert len(manager.sessions) == 0
         finally:
             temp_path.unlink()
 
@@ -136,7 +135,8 @@ class TestIsSymbolTradeable:
         )
         
         assert is_tradeable is False
-        assert "Fuera de horario" in reason
+        # Puede ser "Fuera de horario" o "No hay sesiones configuradas" dependiendo de si hay próxima sesión
+        assert "Fuera de horario" in reason or "No hay sesiones configuradas" in reason
     
     def test_symbol_outside_hours_with_position(self, temp_config_file):
         """Test: Símbolo fuera de horario CON posición permite reevaluación."""

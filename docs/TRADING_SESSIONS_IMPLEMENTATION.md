@@ -57,12 +57,12 @@ Clase principal que gestiona las sesiones de trading:
 
 | Sesión | Horario | Símbolos | Risk Level | Observaciones |
 |--------|---------|----------|------------|---------------|
-| **londres** | 02:00-05:00 | EURUSD, GBPUSD, EURGBP | medio | Sesión europea temprana |
-| **ny_londres_overlap** | 08:00-11:00 | EURUSD, GBPUSD, USDCAD, USDCHF | **alto** | ⭐ MÁXIMA PRIORIDAD - Mayor liquidez |
-| **ny_tarde** | 11:00-13:00 | EURUSD, USDCAD | medio | Continuación NY |
-| **dead_zone** | 13:00-18:00 | *(ninguno)* | ninguno | ⛔ NO OPERAR - Baja liquidez |
-| **asia** | 19:00-23:59 | USDJPY, AUDUSD, NZDUSD | bajo | Sesión asiática |
-| **asia_madrugada** | 00:00-02:00 | USDJPY, AUDUSD, NZDUSD | bajo | Continuación Asia |
+| **ny_londres_overlap** | 08:00-11:00 | EURUSD, GBPUSD, USDCAD, USDCHF, XAUUSD | **alto** | ⭐ MÁXIMA PRIORIDAD - Única sesión activa |
+| **londres** | 02:00-05:00 | *(deshabilitado)* | - | Deshabilitado temporalmente |
+| **ny_tarde** | 11:00-13:00 | *(deshabilitado)* | - | Deshabilitado temporalmente |
+| **dead_zone** | 13:00-18:00 | *(deshabilitado)* | - | Deshabilitado temporalmente |
+| **asia** | 19:00-23:59 | *(deshabilitado)* | - | Deshabilitado temporalmente |
+| **asia_madrugada** | 00:00-02:00 | *(deshabilitado)* | - | Deshabilitado temporalmente |
 
 ### 3. Integración en BaseBotOperations
 

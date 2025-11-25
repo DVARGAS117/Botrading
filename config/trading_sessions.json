@@ -1,19 +1,5 @@
 {
     "sessions": {
-        "londres": {
-            "start": "02:00",
-            "end": "05:00",
-            "symbols": [
-                "EURUSD",
-                "GBPUSD",
-                "EURGBP"
-            ],
-            "strategies": [
-                "A_tendencia",
-                "C_breakout"
-            ],
-            "risk_level": "medio"
-        },
         "ny_londres_overlap": {
             "start": "08:00",
             "end": "11:00",
@@ -30,52 +16,6 @@
                 "C_breakout"
             ],
             "risk_level": "alto"
-        },
-        "ny_tarde": {
-            "start": "11:00",
-            "end": "12:59",
-            "symbols": [
-                "EURUSD",
-                "USDCAD"
-            ],
-            "strategies": [
-                "B_rango"
-            ],
-            "risk_level": "bajo"
-        },
-        "dead_zone": {
-            "start": "13:00",
-            "end": "18:59",
-            "symbols": [],
-            "strategies": [],
-            "risk_level": "ninguno"
-        },
-        "asia": {
-            "start": "19:00",
-            "end": "00:00",
-            "symbols": [
-                "USDJPY",
-                "AUDUSD",
-                "NZDUSD",
-                "AUDJPY"
-            ],
-            "strategies": [
-                "B_rango"
-            ],
-            "risk_level": "bajo"
-        },
-        "asia_madrugada": {
-            "start": "00:00",
-            "end": "02:00",
-            "symbols": [
-                "USDJPY",
-                "AUDUSD",
-                "NZDUSD"
-            ],
-            "strategies": [
-                "B_rango"
-            ],
-            "risk_level": "bajo"
         }
     },
     "global_rules": {

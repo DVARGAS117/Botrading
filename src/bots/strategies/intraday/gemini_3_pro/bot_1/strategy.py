@@ -168,18 +168,33 @@ class IntradayBot1Strategy(BaseBotOperations):
             self.logger.error("Bot no inicializado. Ejecuta initialize() primero.")
             return
         
-        # 1. Verificar horario
-        if not self.is_trading_hours():
-            self.logger.info("Fuera de horario de trading. Esperando...")
-            return
+        # 1. Verificar horario (permitiendo reevaluación fuera de horario)
+        outside_hours = not self.is_trading_hours()
+        if outside_hours:
+            allow_reeval = True if self.session_manager is None else self.session_manager.global_rules.get('allow_reevaluation_outside_hours', True)
+            if allow_reeval:
+                reeval_symbols = self._get_symbols_with_open_positions_for_bot()
+                if reeval_symbols:
+                    self.logger.info(
+                        "⏰ Fuera de horario: procesando solo símbolos con posiciones abiertas",
+                        extra={'symbols': reeval_symbols}
+                    )
+                    active_symbols = sorted(list(set(reeval_symbols)))
+                else:
+                    self.logger.info("Fuera de horario de trading. Esperando...")
+                    return
+            else:
+                self.logger.info("Fuera de horario de trading. Esperando...")
+                return
         
         # 2. Verificar límites diarios
         if self.should_stop_trading_today():
             self.logger.warning("Trading detenido por límites diarios alcanzados")
             return
         
-        # 3. Obtener símbolos activos en la sesión actual
-        active_symbols = self._get_active_symbols_for_trading()
+        # 3. Obtener símbolos activos en la sesión actual (si no estamos fuera de horario)
+        if not outside_hours:
+            active_symbols = self._get_active_symbols_for_trading()
         
         if not active_symbols:
             session_info = self.session_manager.get_current_session() if self.session_manager else {}
@@ -1541,6 +1556,7 @@ class IntradayBot1Strategy(BaseBotOperations):
                 risk_amount=risk_amount,
                 status=OperationStatus.OPEN,
                 conversation_id=operation_id,
+                ticket=int(getattr(position, 'ticket', 0)) if hasattr(position, 'ticket') else None,
             )
             
             self.logger.info(
@@ -1655,7 +1671,8 @@ class IntradayBot1Strategy(BaseBotOperations):
             ticket = position.ticket
             
             # Buscar operación en BD por magic_number (ticket)
-            operation = self.operations_repo.get_operation_by_magic_number(ticket)
+            # Buscar por ticket real (almacenado ahora en BD)
+            operation = self.operations_repo.get_operation_by_ticket(ticket)
             
             if not operation:
                 self.logger.warning(

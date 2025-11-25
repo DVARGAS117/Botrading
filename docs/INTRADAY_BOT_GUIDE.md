@@ -168,32 +168,33 @@ BotConfig(
 
 ### 2. Horarios de Trading
 
-**Archivo**: `config/schedule.json`
+**Archivo**: `config/trading_sessions.json` (Fuente de verdad)
+
+Actualmente, solo la sesión **ny_londres_overlap** está habilitada.
 
 ```json
 {
   "sessions": {
-    "asian": {
-      "name": "Asian Session",
-      "start": "00:00",
-      "end": "09:00",
-      "timezone": "America/Lima",
-      "symbols": ["USDJPY", "AUDUSD"]
-    },
-    "european": {
-      "name": "European Session",
-      "start": "02:00",
-      "end": "12:00",
-      "timezone": "America/Lima",
-      "symbols": ["EURUSD", "GBPUSD"]
-    },
-    "american": {
-      "name": "American Session",
+    "ny_londres_overlap": {
       "start": "08:00",
-      "end": "17:00",
-      "timezone": "America/Lima",
-      "symbols": ["EURUSD", "GBPUSD", "USDJPY"]
+      "end": "11:00",
+      "symbols": [
+        "EURUSD",
+        "GBPUSD",
+        "USDCAD",
+        "USDCHF",
+        "XAUUSD"
+      ],
+      "strategies": [
+        "A_tendencia",
+        "B_rango",
+        "C_breakout"
+      ],
+      "risk_level": "alto"
     }
+  },
+  "global_rules": {
+    "allow_reevaluation_outside_hours": true
   }
 }
 ```

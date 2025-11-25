@@ -168,6 +168,10 @@ class BaseBotOperations(ABC):
         self.magic_number_generator: Optional[MagicNumberGenerator] = None
         # Gestor de sesiones de trading
         self.session_manager: Optional[TradingSessionManager] = None
+
+        # Cache interna de magic activo por símbolo para cierre determinista sin ticket
+        # Estructura: { symbol: magic_number_int }
+        self._active_magic_by_symbol: Dict[str, int] = {}
         
         # Estado del bot
         self.is_initialized = False
@@ -398,21 +402,7 @@ class BaseBotOperations(ABC):
         session_symbols = self.session_manager.get_active_symbols()
         
         # Obtener símbolos con posiciones abiertas (para reevaluación)
-        symbols_with_positions = []
-        allow_reevaluation = self.session_manager.global_rules.get('allow_reevaluation_outside_hours', True)
-        
-        if allow_reevaluation and self.mt5_connection:
-            try:
-                # Obtener TODAS las posiciones del bot (sin filtrar por símbolo)
-                all_positions = self.mt5_connection.get_positions()
-                for pos in all_positions:
-                    if pos.magic == self.config.bot_id and pos.symbol not in symbols_with_positions:
-                        symbols_with_positions.append(pos.symbol)
-            except Exception as e:
-                self.logger.warning(
-                    f"Error obteniendo posiciones abiertas: {e}",
-                    extra={'error': str(e)}
-                )
+        symbols_with_positions = self._get_symbols_with_open_positions_for_bot()
         
         # Combinar: símbolos de sesión + símbolos con posiciones
         active_symbols = set(session_symbols)
@@ -432,6 +422,99 @@ class BaseBotOperations(ABC):
                 )
         
         return final_symbols
+
+    def _get_symbols_with_open_positions_for_bot(self) -> List[str]:
+        """Retorna símbolos con posiciones abiertas pertenecientes a este bot.
+        
+        Detecta tanto magic legacy (== bot_id) como magic estructurado de 6 dígitos
+        donde el primer dígito corresponde al bot mapeado (1-6) o decodificando
+        con MagicNumberGenerator.
+        """
+        symbols_with_positions: List[str] = []
+        if self.session_manager is None:
+            allow_reevaluation = True
+        else:
+            allow_reevaluation = self.session_manager.global_rules.get('allow_reevaluation_outside_hours', True)
+
+        if not allow_reevaluation or not self.mt5_connection:
+            return symbols_with_positions
+
+        try:
+            all_positions = self.mt5_connection.get_positions()
+            try:
+                from src.core.magic_number_generator import MagicNumberGenerator
+                magic_decoder = MagicNumberGenerator(logger=self.logger)
+            except Exception:
+                magic_decoder = None
+            # Enhanced v2 decoder (familia/estrategia/agente)
+            try:
+                from src.core.agent_variant_codes import resolve_codes
+                from src.core.enhanced_magic_number_generator import EnhancedMagicNumberGenerator
+                magic_v2 = EnhancedMagicNumberGenerator()
+                resolved_codes = resolve_codes(
+                    ai_model=getattr(self.config, 'ai_model', ''), strategy_name="INTRADAY", data_mode="raw"
+                )
+            except Exception:
+                magic_v2 = None
+                resolved_codes = None
+
+            mapped_bot_id = self.config.bot_id - 100 if self.config.bot_id >= 101 else self.config.bot_id
+
+            for pos in all_positions:
+                try:
+                    magic_val = int(getattr(pos, 'magic', -1))
+                except Exception:
+                    magic_val = -1
+
+                symbol_val = getattr(pos, 'symbol', None)
+                if not symbol_val:
+                    continue
+
+                is_bot_position = False
+
+                if magic_val == self.config.bot_id:
+                    is_bot_position = True
+                elif 100000 <= magic_val <= 999999:
+                    try:
+                        first_digit = int(str(magic_val)[0])
+                        if first_digit == mapped_bot_id:
+                            is_bot_position = True
+                        if not is_bot_position and magic_decoder is not None:
+                            try:
+                                comp = magic_decoder.decode(magic_val)
+                                if comp.bot_id == mapped_bot_id:
+                                    is_bot_position = True
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                elif magic_val == mapped_bot_id:
+                    is_bot_position = True
+
+                # Caso Enhanced v2: validar por familia/estrategia/agente
+                if not is_bot_position and magic_v2 is not None and resolved_codes is not None and 100000 <= magic_val <= 999999:
+                    try:
+                        comp2 = magic_v2.decode(magic_val)
+                        fam_id, strat_id, agent_id = resolved_codes
+                        if (
+                            comp2.family_id == fam_id and
+                            comp2.strategy_id == strat_id and
+                            comp2.agent_id == agent_id
+                        ):
+                            is_bot_position = True
+                        
+                    except Exception:
+                        pass
+
+                if is_bot_position and symbol_val not in symbols_with_positions:
+                    symbols_with_positions.append(symbol_val)
+        except Exception as e:
+            self.logger.warning(
+                f"Error obteniendo posiciones abiertas: {e}",
+                extra={'error': str(e)}
+            )
+
+        return symbols_with_positions
     
     def _should_query_symbol(self, symbol: str) -> Tuple[bool, str]:
         """
@@ -565,17 +648,33 @@ class BaseBotOperations(ABC):
             return
         
         # 1. Verificar horario
-        if not self.is_trading_hours():
-            self.logger.info("Fuera de horario de trading. Esperando...")
-            return
+        outside_hours = not self.is_trading_hours()
+        if outside_hours:
+            # Permitir reevaluación de posiciones abiertas fuera de horario
+            allow_reeval = True if self.session_manager is None else self.session_manager.global_rules.get('allow_reevaluation_outside_hours', True)
+            if allow_reeval:
+                reeval_symbols = self._get_symbols_with_open_positions_for_bot()
+                if reeval_symbols:
+                    self.logger.info(
+                        "⏰ Fuera de horario: procesando solo símbolos con posiciones abiertas",
+                        extra={'symbols': reeval_symbols}
+                    )
+                    active_symbols = sorted(list(set(reeval_symbols)))
+                else:
+                    self.logger.info("Fuera de horario de trading. Esperando...")
+                    return
+            else:
+                self.logger.info("Fuera de horario de trading. Esperando...")
+                return
         
         # 2. Verificar límites diarios
         if self.should_stop_trading_today():
             self.logger.warning("Trading detenido por límites diarios alcanzados")
             return
         
-        # 3. Obtener símbolos activos en la sesión actual
-        active_symbols = self._get_active_symbols_for_trading()
+        # 3. Obtener símbolos activos en la sesión actual (si no se definieron por reevaluación)
+        if not outside_hours:
+            active_symbols = self._get_active_symbols_for_trading()
         
         if not active_symbols:
             session_info = self.session_manager.get_current_session() if self.session_manager else {}
@@ -1111,6 +1210,24 @@ class BaseBotOperations(ABC):
                         'volume': result.volume
                     }
                 )
+                # Registrar magic en cache si se pudo enviar y recuperar posición
+                try:
+                    if result and getattr(result, 'order', None) and self.mt5_connection is not None:
+                        positions_post = self.mt5_connection.get_positions(symbol=symbol)
+                        for p in positions_post:
+                            # Coincidencia por ticket o por magic generado
+                            if getattr(p, 'ticket', None) == getattr(result, 'order', None) or getattr(p, 'magic', None) == magic:
+                                self._active_magic_by_symbol[symbol] = int(getattr(p, 'magic', magic))
+                                self.logger.debug(
+                                    "Cache magic actualizado tras apertura",
+                                    extra={'symbol': symbol, 'magic_cached': self._active_magic_by_symbol[symbol]}
+                                )
+                                break
+                except Exception as e:
+                    self.logger.debug(
+                        "No se pudo actualizar cache de magic tras apertura",
+                        extra={'symbol': symbol, 'error': str(e)}
+                    )
         except Exception as e:
             self.logger.error(
                 f"Error al abrir posición en {symbol}: {e}",
@@ -1135,6 +1252,50 @@ class BaseBotOperations(ABC):
                 # Intentar resolver el ticket por magic_number (BD) y/o Magic v2 del bot
                 if hasattr(self, 'mt5_connection') and self.mt5_connection is not None:
                     positions = self.mt5_connection.get_positions(symbol=symbol)
+                else:
+                    # Fallback: usar position_manager si existe (estrategias INTRADAY lo inicializan)
+                    positions = []
+                    if hasattr(self, 'position_manager') and getattr(self, 'position_manager') is not None:
+                        try:
+                            positions = self.position_manager.get_positions_by_symbol(symbol)
+                            self.logger.info(
+                                "Usando PositionManager para inferir ticket de cierre (fallback mt5_connection=None)",
+                                extra={'symbol': symbol, 'positions_detected': len(positions)}
+                            )
+                        except Exception as e:
+                            self.logger.warning(
+                                f"Fallback PositionManager falló: {e}",
+                                extra={'symbol': symbol, 'error': str(e)}
+                            )
+                if positions:
+                    # Si existe cache de magic y corresponde a una única posición, usarlo de forma determinista
+                    cached_magic = self._active_magic_by_symbol.get(symbol)
+                    if cached_magic is not None:
+                        matching = [p for p in positions if int(getattr(p, 'magic', -1)) == int(cached_magic)]
+                        if len(matching) == 1 and getattr(matching[0], 'ticket', None):
+                            auto_ticket = int(matching[0].ticket)
+                            self.logger.info(
+                                "Cierre determinista usando cache magic",
+                                extra={'symbol': symbol, 'cached_magic': cached_magic, 'ticket': auto_ticket}
+                            )
+                            self.order_manager.close_position(ticket=auto_ticket)
+                            return
+                        elif len(matching) > 1:
+                            self.logger.warning(
+                                "Cache magic corresponde a múltiples posiciones; se requiere ticket explícito",
+                                extra={'symbol': symbol, 'cached_magic': cached_magic, 'matches': len(matching)}
+                            )
+                            return
+                    # Si hay más de una posición y no hay cache determinista, evitar cierre ambiguo
+                    try:
+                        if len(positions) > 1 and cached_magic is None:
+                            self.logger.warning(
+                                "Múltiples posiciones abiertas sin ticket ni magic en cache; cierre abortado por seguridad",
+                                extra={'symbol': symbol, 'positions_count': len(positions)}
+                            )
+                            return
+                    except Exception:
+                        pass
                     if not positions:
                         self.logger.warning("No hay posiciones abiertas para cerrar en este símbolo")
                         return
@@ -1212,8 +1373,8 @@ class BaseBotOperations(ABC):
                     else:
                         self.logger.warning("Sin 'ticket' en decisión y no se pudo inferir de posiciones; cierre manual requerido")
                 else:
-                    # Sin ticket explícito ni acceso a posiciones, evitar cerrar en masa por seguridad
-                    self.logger.warning("Sin 'ticket' en decisión; cierre manual requerido")
+                    # Sin ticket y sin acceso a posiciones (ni MT5 ni PositionManager)
+                    self.logger.warning("Sin 'ticket' en decisión; cierre manual requerido (sin acceso a posiciones)")
         except Exception as e:
             self.logger.error(
                 f"Error al cerrar posición en {symbol}: {e}",
