@@ -17,13 +17,13 @@ KAMIKAZE_SETTINGS = {
         "top_k": 40,
     },
     "trading_config": {
-        "symbols": ["XAUUSD", "US100"], # Default symbols
+        "symbols": ["XAUUSD", "NAS100"], # Oro y Nasdaq
         "timeframe_analysis": "H1",
         "timeframe_execution": "M5",
         "gemini_interval": 1800, # 30 minutos
         "lot_size": 0.01,
-        "sl_points": 500, # Default, ajustar por simbolo
-        "tp_points": 1000, # Default, ajustar por simbolo
+        "sl_points": 300, # 30 pips - Ajustado para volatilidad intradía M5
+        "tp_points": 600, # 60 pips - Ratio 1:2 realista
         "deviation": 20,
     }
 }

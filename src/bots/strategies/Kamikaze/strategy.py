@@ -38,8 +38,8 @@ class KamikazeStrategy(BaseBotOperations):
         
         # Configuración específica de Kamikaze (hardcoded por ahora o desde config)
         self.lot_size = 0.01
-        self.sl_points = 500
-        self.tp_points = 1000
+        self.sl_points = 300  # 30 pips - Ajustado para volatilidad intradía M5
+        self.tp_points = 600  # 60 pips - Ratio 1:2 realista
         self.deviation = 20
         
         # Enhanced Magic Number Generator (v2)

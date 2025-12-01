@@ -49,9 +49,10 @@ La estrategia "Kamikaze" opera bajo el principio de **confluencia entre tendenci
 
 ### Gestión de Riesgo
 - **Máximo de posiciones**: 2 simultáneas (1 por par)
-- **Stop Loss**: 500 puntos (ajustable según volatilidad)
-- **Take Profit**: 1000 puntos (ratio 1:2)
-- **Lote**: 0.01 (mínimo, escalable)
+- **Stop Loss**: 300 puntos (30 pips) - Ajustado para volatilidad intradía M5
+- **Take Profit**: 600 puntos (60 pips) - Ratio 1:2 realista
+- **Lote**: 0.01 (riesgo ~$3 por operación)
+- **Activos**: XAUUSD (Oro), NAS100 (Nasdaq)
 
 ## Flujo de Ejecución
 
