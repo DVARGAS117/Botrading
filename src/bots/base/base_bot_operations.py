@@ -156,8 +156,8 @@ class BaseBotOperations(ABC):
         self.or_calculator: Optional[OpeningRangeCalculator] = None
         self.prompt_builder: Optional[PromptBuilder] = None
         self.response_parser: Optional[VWAPResponseParser] = None
-        # Cliente IA (Vertex por defecto)
-        self.ai_client: Optional[VertexAIClient] = None
+        # Cliente IA (Gemini por defecto)
+        self.ai_client: Optional[GeminiClient] = None
         # Repositorio de consultas IA (tokens y costos)
         self.ia_query_repo: Optional[IAQueryRepository] = None
         # Gestión de órdenes / sizing / specs / magic
@@ -241,7 +241,7 @@ class BaseBotOperations(ABC):
             # 6. Response Parser
             self.response_parser = VWAPResponseParser()
             
-            # 7. AI Client (Vertex por defecto)
+            # 7. AI Client (Gemini Directo por defecto)
             try:
                 # Load API key from credentials or environment
                 gemini_creds = creds.get("gemini", {})
@@ -249,7 +249,7 @@ class BaseBotOperations(ABC):
                 if not api_key:
                     raise BotOperationError("Falta API key de Gemini en config/credentials.json o variable GOOGLE_API_KEY")
                 
-                # Establecer la variable de entorno para que VertexAIClient la encuentre
+                # Establecer la variable de entorno
                 os.environ["GOOGLE_API_KEY"] = api_key
                 
                 model_to_use = self.config.ai_model
@@ -261,29 +261,16 @@ class BaseBotOperations(ABC):
                     )
                     model_to_use = "gemini-3-pro-preview"
                     self.config.ai_model = model_to_use
-                self.ai_client = VertexAIClient(
+                
+                # Usar GeminiClient directamente (Google AI Studio)
+                self.ai_client = GeminiClient(
                     api_key=api_key,
-                    config=VertexAIConfig(model=model_to_use)
+                    config=GeminiConfig(model=model_to_use, use_vertex_ai=False)
                 )
                 # Inicializar repositorio de consultas IA (persistencia costo por consulta)
                 self.ia_query_repo = IAQueryRepository(Path("data/ia_queries.db"))
             except Exception as e:
-                # Fallback a Gemini solo si explícitamente disponible y variable de entorno lo permite
-                allow_fallback = os.getenv("ALLOW_GEMINI_FALLBACK") == "1"
-                if allow_fallback:
-                    self.logger.warning(
-                        f"VertexAIClient fallo ({e}). Intentando fallback GeminiClient..."
-                    )
-                    try:
-                        self.ai_client = GeminiClient(
-                            api_key=api_key,
-                            config=GeminiConfig(model=self.config.ai_model)
-                        )
-                        self.ia_query_repo = IAQueryRepository(Path("data/ia_queries.db"))
-                    except Exception as eg:
-                        raise BotOperationError(f"Fallo inicializando ambos clientes IA: {eg}") from eg
-                else:
-                    raise BotOperationError(f"Fallo inicializando VertexAIClient: {e}") from e
+                raise BotOperationError(f"Fallo inicializando GeminiClient: {e}") from e
             
             # 8. Order Manager + DualOrderManager + helpers
             try:

@@ -235,14 +235,20 @@ def main() -> None:
     display_execution_summary(args, temp_config.symbols)
 
     # Confirmar modo LIVE si es necesario
-    if mode == BotMode.LIVE and not args.yes:
+    if not args.save_prompts and mode == BotMode.LIVE and not args.yes:
         if not confirm_live_mode():
             logger.info("Operación cancelada por el usuario")
             print("\n❌ Operación cancelada. No se ejecutará en modo LIVE.")
             return
 
     # Preguntar modo de evaluación (siempre, independientemente del modo)
-    evaluation_mode = ask_evaluation_mode()
+    if args.save_prompts:
+        logger.info("💾 Modo SAVE-PROMPTS activo: Saltando esperas y validaciones interactivas.")
+        print("\n💾 MODO SAVE-PROMPTS: Generando prompt inmediatamente...")
+        args.single_cycle = True  # Forzar ciclo único
+        evaluation_mode = 'instant'
+    else:
+        evaluation_mode = ask_evaluation_mode()
 
     if evaluation_mode == 'wait':
         wait_for_next_cycle()

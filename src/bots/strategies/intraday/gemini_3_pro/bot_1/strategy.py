@@ -27,7 +27,7 @@ from src.core.operations_repository import (
 )
 from src.core.order_manager import OrderRequest, OrderType
 from src.core.position_manager import PositionManager
-from src.core.vertex_ai_client import VertexAIClient, VertexAIConfig
+from src.core.gemini_client import GeminiClient, GeminiConfig
 from src.core.enhanced_magic_number_generator import EnhancedMagicNumberGenerator
 from src.core.agent_variant_codes import resolve_codes
 from src.core.sequence_manager import SequenceManager
@@ -67,16 +67,8 @@ class IntradayBot1Strategy(BaseBotOperations):
         ops_db_path = Path(__file__).parent.parent.parent.parent.parent.parent / "data" / "operations.db"
         self.operations_repo = OperationsRepository(ops_db_path)
         
-        # Inicializar cliente Vertex AI (Gemini 3 Pro) - se hará en initialize()
-        # vertex_config = VertexAIConfig(
-        #     model="gemini-3-pro-preview",
-        #     temperature=0.7,
-        #     max_tokens=8192,
-        #     top_p=0.95,
-        #     timeout=120,
-        # )
-        # self.vertex_client = VertexAIClient(config=vertex_config)
-        self.vertex_client = None  # Se inicializará en initialize()
+        # Inicializar cliente Gemini (Gemini 3 Pro) - se hará en initialize()
+        self.gemini_client = None  # Se inicializará en initialize()
         
         # Inicializar _position_manager (lazy loading)
         self._position_manager = None
@@ -138,15 +130,18 @@ class IntradayBot1Strategy(BaseBotOperations):
         # Ahora que data_extractor está disponible, crear IntradayIndicatorCalculator
         self.indicator_calculator = IntradayIndicatorCalculator(self.data_extractor)
         
-        # Inicializar cliente Vertex AI (Gemini 3 Pro) ahora que tenemos la API key
-        vertex_config = VertexAIConfig(
+        # Inicializar cliente Gemini (Gemini 3 Pro) ahora que tenemos la API key
+        gemini_config = GeminiConfig(
             model="gemini-3-pro-preview",
             temperature=0.7,
             max_tokens=8192,
             top_p=0.95,
-            timeout=120,
+            timeout=240,
+            use_vertex_ai=False
         )
-        self.vertex_client = VertexAIClient(config=vertex_config)
+        # Usar la API key del cliente base si está disponible
+        api_key = self.ai_client.api_key if self.ai_client else None
+        self.gemini_client = GeminiClient(api_key=api_key, config=gemini_config)
         
         self.logger.info(
             "IntradayIndicatorCalculator inicializado",
@@ -722,9 +717,9 @@ class IntradayBot1Strategy(BaseBotOperations):
                 "cost_usd": 0.0,
             }
         else:
-            # Llamar a Vertex AI (Gemini 3 Pro)
+            # Llamar a Gemini (Gemini 3 Pro)
             try:
-                gemini_response = self.vertex_client.send_prompt(full_prompt)
+                gemini_response = self.gemini_client.send_prompt(full_prompt)
                 
                 if not gemini_response.success:
                     self.logger.error(
@@ -873,8 +868,20 @@ class IntradayBot1Strategy(BaseBotOperations):
         )
         
         try:
+            # Limpiar bloques de código Markdown si existen
+            cleaned_text = response_text.strip()
+            if cleaned_text.startswith("```json"):
+                cleaned_text = cleaned_text[7:]
+            elif cleaned_text.startswith("```"):
+                cleaned_text = cleaned_text[3:]
+            
+            if cleaned_text.endswith("```"):
+                cleaned_text = cleaned_text[:-3]
+            
+            cleaned_text = cleaned_text.strip()
+            
             # Parsear JSON
-            parsed = json.loads(response_text)
+            parsed = json.loads(cleaned_text)
             
             # Validar campos requeridos
             if "accion" not in parsed:

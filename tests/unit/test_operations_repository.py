@@ -70,6 +70,7 @@ def sample_operation_data() -> Dict[str, Any]:
         'take_profit': 1.0950,
         'lot_size': 0.10,
         'risk_percentage': 1.0,
+        'risk_amount': 50.0,
         'status': OperationStatus.OPEN,
         'conversation_id': 'conv_123_abc'
     }
@@ -185,6 +186,7 @@ class TestCreateOperation:
             take_profit=1.2400,
             lot_size=0.05,
             risk_percentage=0.5,
+            risk_amount=25.0,
             status=OperationStatus.OPEN
         )
         
@@ -210,6 +212,7 @@ class TestCreateOperation:
             take_profit=2000.00,
             lot_size=0.02,
             risk_percentage=2.0,
+            risk_amount=100.0,
             status=OperationStatus.PENDING,
             profit_loss=150.50,
             open_time=now,
@@ -250,6 +253,7 @@ class TestCreateOperation:
                 take_profit=1.0950,
                 lot_size=0.10,
                 risk_percentage=1.0,
+                risk_amount=50.0,
                 status=OperationStatus.OPEN
             )
     

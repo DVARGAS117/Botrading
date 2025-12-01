@@ -15,8 +15,8 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, time
 
-from src.bots.bot_1.config import get_bot_1_config, BOT_1_SETTINGS
-from src.bots.bot_1.strategy import Bot1Strategy
+from src.bots.strategies.vwap.gemini_3_pro.bot_1.config import get_bot_1_config, BOT_1_SETTINGS
+from src.bots.strategies.vwap.gemini_3_pro.bot_1.strategy import Bot1Strategy
 from src.bots.base.base_bot_operations import BotMode
 from src.core.vwap_prompt_builder import MarketContext
 from src.core.mt5_data_extractor import Timeframe
@@ -124,7 +124,7 @@ class TestBot1Strategy:
             context = bot.get_market_context()
             assert context == MarketContext.EUROPEAN_SESSION
     
-    @patch('src.bots.bot_1.strategy.Bot1Strategy.prompt_builder')
+    @patch('src.bots.strategies.vwap.gemini_3_pro.bot_1.strategy.Bot1Strategy.prompt_builder')
     def test_prepare_data_for_ai(self, mock_prompt_builder, bot):
         """Test preparación de datos para IA"""
         # Mock del prompt builder
@@ -152,7 +152,7 @@ class TestBot1Strategy:
         assert user_prompt == "User Prompt Test"
         bot.prompt_builder.build_vwap_methodology_prompt.assert_called_once()
     
-    @patch('src.bots.bot_1.strategy.Bot1Strategy.response_parser')
+    @patch('src.bots.strategies.vwap.gemini_3_pro.bot_1.strategy.Bot1Strategy.response_parser')
     def test_parse_ai_response_valid(self, mock_parser, bot):
         """Test parsing de respuesta válida"""
         # Mock del parser
@@ -200,10 +200,10 @@ class TestBot1Integration:
     
     @patch('src.bots.base.base_bot_operations.create_connector_from_credentials')
     @patch('src.bots.base.base_bot_operations.MT5DataExtractor')
-    @patch('src.bots.base.base_bot_operations.VertexAIClient')
+    @patch('src.bots.base.base_bot_operations.GeminiClient')
     def test_full_initialization(
         self,
-        mock_vertex,
+        mock_gemini,
         mock_extractor,
         mock_connector_factory,
         bot
