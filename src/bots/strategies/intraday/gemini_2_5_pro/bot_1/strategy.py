@@ -27,7 +27,7 @@ from src.core.operations_repository import (
 )
 from src.core.order_manager import OrderRequest, OrderType
 from src.core.position_manager import PositionManager
-from src.core.vertex_ai_client import VertexAIClient, VertexAIConfig
+from src.core.gemini_client import GeminiClient, GeminiConfig
 from src.core.vwap_prompt_builder import MarketContext
 from src.core.enhanced_magic_number_generator import EnhancedMagicNumberGenerator
 from src.core.agent_variant_codes import resolve_codes
@@ -67,16 +67,8 @@ class IntradayBot1Strategy(BaseBotOperations):
         ops_db_path = Path(__file__).parent.parent.parent.parent.parent.parent / "data" / "operations.db"
         self.operations_repo = OperationsRepository(ops_db_path)
         
-        # Inicializar cliente Vertex AI (Gemini 2.5 Pro) - se hará en initialize()
-        # vertex_config = VertexAIConfig(
-        #     model="gemini-2.5-pro",
-        #     temperature=0.7,
-        #     max_tokens=8192,
-        #     top_p=0.95,
-        #     timeout=120,
-        # )
-        # self.vertex_client = VertexAIClient(config=vertex_config)
-        self.vertex_client = None  # Se inicializará en initialize()
+        # Inicializar cliente Gemini (Gemini 2.5 Pro) - se hará en initialize()
+        self.gemini_client = None  # Se inicializará en initialize()
         
         # Inicializar _position_manager (lazy loading)
         self._position_manager = None
@@ -112,6 +104,29 @@ class IntradayBot1Strategy(BaseBotOperations):
         # Ruta a los prompts (usar config/prompt_templates/)
         # Subir 6 niveles desde strategy.py hasta raíz del proyecto
         self.prompts_dir = Path(__file__).parent.parent.parent.parent.parent.parent.parent / "config" / "prompt_templates"
+    
+    def _get_current_market_price(self, symbol: str) -> float:
+        """Obtiene el precio actual de mercado desde el tick de MT5.
+        Usa `last` si está disponible; si no, usa el promedio (bid+ask)/2.
+        """
+        try:
+            tick = self.mt5_connection._mt5.symbol_info_tick(symbol) if self.mt5_connection else None
+            if tick is None:
+                return 0.0
+            last = getattr(tick, 'last', None)
+            bid = getattr(tick, 'bid', None)
+            ask = getattr(tick, 'ask', None)
+            if last and last > 0:
+                return float(last)
+            if bid and ask and bid > 0 and ask > 0:
+                return float((bid + ask) / 2.0)
+            if ask and ask > 0:
+                return float(ask)
+            if bid and bid > 0:
+                return float(bid)
+            return 0.0
+        except Exception:
+            return 0.0
 
         self.logger.info(
             "Bot 1 (INTRADAY Gemini 2.5 Pro) inicializado",
@@ -138,15 +153,18 @@ class IntradayBot1Strategy(BaseBotOperations):
         # Ahora que data_extractor está disponible, crear IntradayIndicatorCalculator
         self.indicator_calculator = IntradayIndicatorCalculator(self.data_extractor)
         
-        # Inicializar cliente Vertex AI (Gemini 2.5 Pro) ahora que tenemos la API key
-        vertex_config = VertexAIConfig(
+        # Inicializar cliente Gemini (Gemini 2.5 Pro) ahora que tenemos la API key
+        gemini_config = GeminiConfig(
             model="gemini-2.5-pro",
             temperature=0.7,
             max_tokens=8192,
             top_p=0.95,
             timeout=120,
+            use_vertex_ai=False
         )
-        self.vertex_client = VertexAIClient(config=vertex_config)
+        # Usar la API key del cliente base si está disponible
+        api_key = self.ai_client.api_key if self.ai_client else None
+        self.gemini_client = GeminiClient(api_key=api_key, config=gemini_config)
         
         self.logger.info(
             "IntradayIndicatorCalculator inicializado",
@@ -357,6 +375,8 @@ class IntradayBot1Strategy(BaseBotOperations):
         user_prompt = user_prompt.replace(
             "{strategic_package}", json.dumps(strategic_package, indent=2)
         )
+        # Inyectar precio actual del mercado en el prompt
+        user_prompt = user_prompt.replace("{current_price}", f"{self._get_current_market_price(symbol)}")
         
         # Construir información de posición
         if has_active_position:
@@ -555,6 +575,8 @@ class IntradayBot1Strategy(BaseBotOperations):
         user_prompt = user_prompt.replace(
             "{strategic_package}", json.dumps(strategic_package, indent=2)
         )
+        # Inyectar precio actual del mercado en el prompt
+        user_prompt = user_prompt.replace("{current_price}", f"{self._get_current_market_price(symbol)}")
         
         # Construir información de posición (con o sin posición activa)
         if has_active_position:
@@ -708,9 +730,9 @@ class IntradayBot1Strategy(BaseBotOperations):
                 "cost_usd": 0.0,
             }
         else:
-            # Llamar a Vertex AI (Gemini 2.5 Pro)
+            # Llamar a Gemini (Gemini 2.5 Pro)
             try:
-                gemini_response = self.vertex_client.send_prompt(full_prompt)
+                gemini_response = self.gemini_client.send_prompt(full_prompt)
                 
                 if not gemini_response.success:
                     self.logger.error(
@@ -859,8 +881,20 @@ class IntradayBot1Strategy(BaseBotOperations):
         )
         
         try:
+            # Limpiar bloques de código Markdown si existen
+            cleaned_text = response_text.strip()
+            if cleaned_text.startswith("```json"):
+                cleaned_text = cleaned_text[7:]
+            elif cleaned_text.startswith("```"):
+                cleaned_text = cleaned_text[3:]
+            
+            if cleaned_text.endswith("```"):
+                cleaned_text = cleaned_text[:-3]
+            
+            cleaned_text = cleaned_text.strip()
+            
             # Parsear JSON
-            parsed = json.loads(response_text)
+            parsed = json.loads(cleaned_text)
             
             # Validar campos requeridos
             if "accion" not in parsed:

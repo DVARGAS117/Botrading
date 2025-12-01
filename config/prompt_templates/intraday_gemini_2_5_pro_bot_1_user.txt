@@ -2,6 +2,7 @@
 - HORA (PET): {current_time}
 - PAR/ACTIVO: {symbol}
 - ID OPERACIÓN: {operation_id}
+ - PRECIO ACTUAL DEL MERCADO: {current_price}
 
 ### ESTADO DE MI CARTERA
 {current_position}
