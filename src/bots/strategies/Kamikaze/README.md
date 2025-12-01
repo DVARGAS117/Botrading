@@ -1,0 +1,180 @@
+# Estrategia Kamikaze - Documentación
+
+## Resumen
+Estrategia de trading que combina análisis de tendencia H1 con Gemini 2.5 Pro y reconocimiento matemático de patrones de velas en M5 para ejecutar operaciones de alta precisión.
+
+## Concepto Base
+
+La estrategia "Kamikaze" opera bajo el principio de **confluencia entre tendencia y patrón**:
+
+1. **Gemini 2.5 Pro** analiza velas H1 para determinar la tendencia inmediata (BULLISH/BEARISH/NEUTRAL)
+2. **Detector de Patrones** analiza velas M5 para identificar señales de entrada precisas
+3. **Ejecución** solo ocurre cuando hay confluencia: Tendencia + Patrón coinciden
+
+### Patrones Reconocidos
+
+#### 1. HAMMER (Martillo) - Señal Alcista
+- **Descripción**: Vela con mecha inferior larga (≥2x el cuerpo) y cuerpo pequeño en la parte superior
+- **Significado**: Rechazo fuerte de zona baja, posible reversión alcista
+- **Condición**: Requiere Bias BULLISH de Gemini
+
+#### 2. SHOOTING STAR (Estrella Fugaz) - Señal Bajista
+- **Descripción**: Vela con mecha superior larga (≥2x el cuerpo) y cuerpo pequeño en la parte inferior
+- **Significado**: Rechazo fuerte de zona alta, posible reversión bajista
+- **Condición**: Requiere Bias BEARISH de Gemini
+
+#### 3. BULLISH ENGULFING (Envolvente Alcista) - Señal Alcista
+- **Descripción**: Vela alcista que envuelve completamente a la vela bajista anterior
+- **Significado**: Cambio de momentum, los compradores toman control
+- **Condición**: Requiere Bias BULLISH de Gemini
+
+#### 4. BEARISH ENGULFING (Envolvente Bajista) - Señal Bajista
+- **Descripción**: Vela bajista que envuelve completamente a la vela alcista anterior
+- **Significado**: Cambio de momentum, los vendedores toman control
+- **Condición**: Requiere Bias BEARISH de Gemini
+
+## Reglas de Trading
+
+### Señal de COMPRA (LONG)
+- Gemini indica tendencia BULLISH en H1
+- **Y** se detecta patrón alcista en M5: HAMMER o BULLISH_ENGULFING
+- **Y** no hay posición abierta en el par
+- **Y** hay menos de 2 posiciones totales abiertas
+
+### Señal de VENTA (SHORT)
+- Gemini indica tendencia BEARISH en H1
+- **Y** se detecta patrón bajista en M5: SHOOTING_STAR o BEARISH_ENGULFING
+- **Y** no hay posición abierta en el par
+- **Y** hay menos de 2 posiciones totales abiertas
+
+### Gestión de Riesgo
+- **Máximo de posiciones**: 2 simultáneas (1 por par)
+- **Stop Loss**: 500 puntos (ajustable según volatilidad)
+- **Take Profit**: 1000 puntos (ratio 1:2)
+- **Lote**: 0.01 (mínimo, escalable)
+
+## Flujo de Ejecución
+
+```
+1. Cada 30 minutos:
+   - Consultar Gemini con datos H1
+   - Actualizar Bias del mercado
+   - Guardar estado (persiste hasta próxima consulta)
+
+2. Cada 10 segundos (configurable):
+   - Verificar límite de posiciones
+   - Analizar velas M5 cerradas
+   - Detectar patrones matemáticos
+   - Si hay confluencia Bias + Patrón:
+     * Ejecutar orden
+```
+
+## Ventajas del Enfoque
+
+1. **Filtro de Ruido**: No opera en cada movimiento pequeño
+2. **Confluencia Doble**: Tendencia macro + patrón micro = Alta probabilidad
+3. **Matemática Pura**: Detección de patrones sin subjetividad
+4. **Control de Riesgo**: Límite de posiciones y gestión de capital
+5. **Evita Contratendencia**: Si Gemini dice BEARISH pero aparece HAMMER, NO opera
+
+## Datos Enviados a Gemini
+
+Para maximizar precisión, Gemini recibe:
+- Últimas 10 velas H1 con OHLC completo
+- **Estado de cada vela**: OPEN (última, en formación) o CLOSED (históricas)
+- **Timestamp del servidor**: Hora actual de consulta
+- **Contexto**: Nombre del símbolo y solicitud de análisis SMC
+
+## Configuración
+
+### Parámetros Principales
+```python
+SYMBOLS = ["XAUUSD", "US100"]
+TIMEFRAME_ANALYSIS = H1     # Gemini analiza en H1
+TIMEFRAME_EXECUTION = M5    # Patrones se detectan en M5
+GEMINI_INTERVAL = 1800      # 30 minutos entre consultas
+LOT_SIZE = 0.01
+SL_POINTS = 500
+TP_POINTS = 1000
+DEVIATION = 20
+MAX_POSITIONS = 2           # Máximo total
+MAX_PER_SYMBOL = 1          # Máximo por par
+```
+
+## Ejemplo de Operación Real
+
+### Escenario 1: Compra en XAUUSD
+```
+10:00 - Gemini consulta H1 → Responde "BULLISH"
+10:05 - Bot analiza M5 → Detecta velas normales → No opera
+10:10 - Bot analiza M5 → Detecta HAMMER → ✅ COMPRA
+       (Confluencia: BULLISH + HAMMER)
+```
+
+### Escenario 2: NO Opera (Sin Confluencia)
+```
+10:00 - Gemini consulta H1 → Responde "BULLISH"
+10:05 - Bot analiza M5 → Detecta SHOOTING_STAR → ❌ NO OPERA
+       (Patrón bajista con tendencia alcista = Sin confluencia)
+```
+
+### Escenario 3: Límite de Posiciones
+```
+10:00 - XAUUSD abierto, US100 abierto (2/2 posiciones)
+10:05 - Nueva señal en XAUUSD → ❌ NO OPERA
+       (Límite de posiciones alcanzado)
+```
+
+## Uso
+
+### Ejecución en Modo Demo
+```bash
+python src/bots/strategies/Kamikaze/main.py --mode demo --interval 10
+```
+
+### Ejecución en Modo Live
+```bash
+python src/bots/strategies/Kamikaze/main.py --mode live --interval 10
+```
+
+### Ejecutar Pruebas
+```bash
+python -m unittest tests/bots/strategies/Kamikaze/test_kamikaze.py -v
+```
+
+## Pruebas Unitarias
+
+La estrategia cuenta con 16 pruebas que validan:
+- ✅ Detección correcta de cada patrón (HAMMER, SHOOTING_STAR, ENGULFING)
+- ✅ Señales de compra/venta con confluencia
+- ✅ Rechazo de señales sin confluencia
+- ✅ Persistencia del Bias entre ciclos
+- ✅ Límite de posiciones (total y por símbolo)
+- ✅ Integración con Gemini (timestamp y estado de velas)
+
+## Notas Técnicas
+
+- **Velas cerradas**: El detector de patrones usa solo velas cerradas en M5 para evitar repinte
+- **Velas abiertas a Gemini**: La última vela H1 se marca como OPEN para contexto completo
+- **Backoff**: Si Gemini falla, el Bias se mantiene en NEUTRAL (no opera)
+- **Logging**: Todos los patrones detectados y decisiones se registran con emojis para facilitar monitoreo
+
+## Estructura de Archivos
+
+```
+src/bots/strategies/Kamikaze/
+├── strategy.py      # Lógica principal de la estrategia
+├── config.py        # Configuración y parámetros
+├── main.py          # Punto de entrada
+├── estrategia.md    # Script original de referencia
+└── README.md        # Esta documentación
+
+tests/bots/strategies/Kamikaze/
+└── test_kamikaze.py # Pruebas unitarias completas
+```
+
+---
+
+**Última actualización**: 2025-12-01  
+**Versión**: 2.0 (con reconocimiento de patrones matemático)  
+**Autor**: Botrading Team
