@@ -164,17 +164,14 @@ class KamikazeStrategy(BaseBotOperations):
         
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        prompt = f"""
-        Eres un trader experto en Smart Money Concepts. Analiza estos datos de precios (H1) para {symbol}.
-        Hora actual del servidor: {current_time}
-        
-        Datos recientes (La última vela marcada como OPEN está en formación):
-        {data_str}
-        
-        Determina la TENDENCIA INMEDIATA basándote en máximos y mínimos recientes.
-        Responde SOLO con una palabra: "BULLISH" (si debo buscar compras), "BEARISH" (si debo buscar ventas), o "RANGING" (si no hay claridad).
-        No des explicaciones.
-        """
+        prompt = f"""Analyze the price data below for {symbol}. Current time: {current_time}
+
+Recent H1 candles (last one marked OPEN is forming):
+{data_str}
+
+Based on the recent highs and lows pattern, determine the immediate trend direction.
+Respond with ONLY ONE WORD: "BULLISH", "BEARISH", or "RANGING".
+No explanation needed."""
         
         response = self.gemini_client.send_prompt(prompt)
         
@@ -187,6 +184,23 @@ class KamikazeStrategy(BaseBotOperations):
         if "BULLISH" in text: return "BULLISH"
         if "BEARISH" in text: return "BEARISH"
         return "NEUTRAL"
+
+    def calculate_ema(self, df: pd.DataFrame, span: int = 50) -> float:
+        """
+        Calcula la EMA (Exponential Moving Average) para el período especificado.
+        
+        Args:
+            df: DataFrame con datos OHLC
+            span: Período de la EMA (default 50)
+            
+        Returns:
+            Valor actual de la EMA o None si no hay suficientes datos
+        """
+        if len(df) < span:
+            return None
+        
+        ema = df['close'].ewm(span=span, adjust=False).mean()
+        return ema.iloc[-1]
 
     def detect_pattern(self, df: pd.DataFrame) -> Optional[str]:
         """
@@ -263,12 +277,12 @@ class KamikazeStrategy(BaseBotOperations):
         if bias == "NEUTRAL":
             return
 
-        # 4. Obtener datos M5 (últimas 20 velas cerradas)
+        # 4. Obtener datos M5 (100 velas para calcular EMA 50 con datos suficientes)
         try:
             ohlcv_m5 = self.data_extractor.get_ohlcv(
                 symbol=symbol,
                 timeframe=Timeframe.M5,
-                count=20,
+                count=100,  # Suficiente para EMA 50 y contexto
                 exclude_current=True  # Solo velas cerradas para evitar repinte
             )
         except MT5DataError:
@@ -278,11 +292,29 @@ class KamikazeStrategy(BaseBotOperations):
         if len(df_m5) < 2:
             return
 
+        # 4.1 Calcular EMA 50 para contexto (NO como filtro bloqueante)
+        ema_50 = self.calculate_ema(df_m5, span=50)
+        current_price = df_m5.iloc[-1]['close']
+        
+        # Determinar posición relativa al EMA (solo para logging)
+        price_vs_ema = "N/A"
+        if ema_50 is not None:
+            if current_price > ema_50:
+                price_vs_ema = "ABOVE EMA" # Precio por encima, zona de compras más favorable
+            else:
+                price_vs_ema = "BELOW EMA" # Precio por debajo, zona de ventas más favorable
+
         # 5. Detectar patrón de velas
         pattern = self.detect_pattern(df_m5)
         
+        # Formatear EMA para logging
+        ema_str = f"{ema_50:.5f}" if ema_50 is not None else "N/A"
+        
         if pattern:
-            self.logger.info(f"📊 Patrón detectado en {symbol}: {pattern} | Bias Gemini: {bias}")
+            self.logger.info(
+                f"📊 Patrón detectado en {symbol}: {pattern} | Bias={bias} | "
+                f"Price={current_price:.5f}, EMA50={ema_str}, Position={price_vs_ema}"
+            )
 
         # 6. LÓGICA DE FRANCOTIRADOR: Confluencia de Bias + Patrón
         
@@ -290,7 +322,10 @@ class KamikazeStrategy(BaseBotOperations):
         # Gemini dice que H1 es Alcista Y tenemos patrón de reversión alcista en M5
         valid_long_patterns = ["BULLISH_ENGULFING", "HAMMER"]
         if bias == "BULLISH" and pattern in valid_long_patterns:
-            self.logger.info(f"🎯 GATILLO DE COMPRA en {symbol}: {pattern} + Bias {bias}")
+            self.logger.info(
+                f"🎯 GATILLO DE COMPRA en {symbol}: {pattern} + Bias {bias} | "
+                f"Price={current_price:.5f}, EMA50={ema_str}, Position={price_vs_ema}"
+            )
             self.place_order(symbol, OrderType.BUY)
             return
 
@@ -298,7 +333,10 @@ class KamikazeStrategy(BaseBotOperations):
         # Gemini dice que H1 es Bajista Y tenemos patrón de reversión bajista en M5
         valid_short_patterns = ["BEARISH_ENGULFING", "SHOOTING_STAR"]
         if bias == "BEARISH" and pattern in valid_short_patterns:
-            self.logger.info(f"🎯 GATILLO DE VENTA en {symbol}: {pattern} + Bias {bias}")
+            self.logger.info(
+                f"🎯 GATILLO DE VENTA en {symbol}: {pattern} + Bias {bias} | "
+                f"Price={current_price:.5f}, EMA50={ema_str}, Position={price_vs_ema}"
+            )
             self.place_order(symbol, OrderType.SELL)
             return
 

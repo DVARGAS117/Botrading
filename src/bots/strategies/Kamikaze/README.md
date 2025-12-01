@@ -7,9 +7,31 @@ Estrategia de trading que combina análisis de tendencia H1 con Gemini 2.5 Pro y
 
 La estrategia "Kamikaze" opera bajo el principio de **confluencia entre tendencia y patrón**:
 
-1. **Gemini 2.5 Pro** analiza velas H1 para determinar la tendencia inmediata (BULLISH/BEARISH/NEUTRAL)
-2. **Detector de Patrones** analiza velas M5 para identificar señales de entrada precisas
+1. **Gemini 2.5 Pro** analiza 10 velas H1 para determinar la tendencia inmediata (BULLISH/BEARISH/NEUTRAL)
+2. **Detector de Patrones** analiza 100 velas M5 (últimas 2 para patrones, 50+ para EMA de contexto)
 3. **Ejecución** solo ocurre cuando hay confluencia: Tendencia + Patrón coinciden
+
+### Datos Utilizados
+
+- **Para Gemini (H1)**: 10 velas horarias (~10 horas de contexto)
+  - Última vela: OPEN (en formación)
+  - Anteriores: CLOSED
+  - Incluye timestamp para análisis temporal
+
+- **Para Patrones (M5)**: 100 velas de 5 minutos (~8.3 horas de historia)
+  - Solo velas CLOSED (evita repintado)
+  - Últimas 2 velas: Detección de patrones
+  - 50+ velas: Cálculo de EMA 50 como contexto informativo
+
+### Indicador de Contexto: EMA 50
+
+La estrategia calcula una **EMA de 50 períodos en M5** como indicador de referencia:
+- **NO bloquea trades** (no es filtro eliminatorio)
+- Proporciona **contexto adicional** en los logs
+- Permite análisis post-mortem de calidad de señales
+- Identifica si el precio está en zona de compras (ABOVE EMA) o ventas (BELOW EMA)
+
+**Filosofía**: Gemini ya actúa como filtro de tendencia macro. La EMA complementa sin interferir.
 
 ### Patrones Reconocidos
 

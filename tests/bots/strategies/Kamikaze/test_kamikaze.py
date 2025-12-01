@@ -273,7 +273,7 @@ class TestKamikazeStrategy(unittest.TestCase):
         prompt = args[0]
         self.assertIn("OPEN", prompt)  # Last candle should be marked as OPEN
         self.assertIn("CLOSED", prompt)  # Previous candles should be CLOSED
-        self.assertIn("Hora actual", prompt)  # Should include current time
+        self.assertIn("Current time", prompt)  # Should include current time
         self.assertIn("time", prompt)  # Should include time column
         self.assertEqual(bias, "BEARISH")
 
