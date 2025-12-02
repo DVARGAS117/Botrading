@@ -84,12 +84,12 @@ La estrategia calcula una **EMA de 50 períodos en M5** como indicador de refere
    - Actualizar Bias del mercado
    - Guardar estado (persiste hasta próxima consulta)
 
-2. Cada 10 segundos (configurable):
-   - Verificar límite de posiciones
-   - Analizar velas M5 cerradas
-   - Detectar patrones matemáticos
-   - Si hay confluencia Bias + Patrón:
-     * Ejecutar orden
+2. Cada 5 minutos (M5, 1 minuto después del cierre de vela):
+       - Verificar límite de posiciones
+       - Analizar velas M5 cerradas
+       - Detectar patrones matemáticos
+       - Si hay confluencia Bias + Patrón:
+         * Ejecutar orden
 ```
 
 ## Ventajas del Enfoque
@@ -152,12 +152,12 @@ MAX_PER_SYMBOL = 1          # Máximo por par
 
 ### Ejecución en Modo Demo
 ```bash
-python src/bots/strategies/Kamikaze/main.py --mode demo --interval 10
+python -m src.bots.strategies.Kamikaze.main --mode demo --verbose
 ```
 
 ### Ejecución en Modo Live
 ```bash
-python src/bots/strategies/Kamikaze/main.py --mode live --interval 10
+python -m src.bots.strategies.Kamikaze.main --mode live --verbose
 ```
 
 ### Ejecutar Pruebas
@@ -199,5 +199,5 @@ tests/bots/strategies/Kamikaze/
 ---
 
 **Última actualización**: 2025-12-01  
-**Versión**: 2.0 (con reconocimiento de patrones matemático)  
+**Versión**: 2.1 (scheduler M5 + verbose + Bias cada 30min)  
 **Autor**: Botrading Team

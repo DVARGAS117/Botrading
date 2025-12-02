@@ -2,14 +2,18 @@
 
 import time
 import pandas as pd
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timezone, timedelta
+try:
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None  # Fallback si no disponible
 from typing import Dict, Optional, Any
 
 from src.bots.base.base_bot_operations import BaseBotOperations, BotConfig
 from src.core.gemini_client import GeminiClient, GeminiConfig
 from src.core.mt5_data_extractor import Timeframe, MT5DataError
 from src.core.order_manager import OrderRequest, OrderType
-from src.core.logger import get_bot_logger
+from src.core.logger import get_bot_logger, LogLevel
 from src.core.enhanced_magic_number_generator import EnhancedMagicNumberGenerator
 
 class KamikazeStrategy(BaseBotOperations):
@@ -35,6 +39,9 @@ class KamikazeStrategy(BaseBotOperations):
         self.last_gemini_call = 0
         self.gemini_interval = 1800  # 30 minutos
         self.gemini_client: Optional[GeminiClient] = None
+        self.force_trading: bool = False
+        # Modo verbose para elevar algunos logs a INFO
+        self.verbose: bool = False
         
         # Configuración específica de Kamikaze (hardcoded por ahora o desde config)
         self.lot_size = 0.01
@@ -61,9 +68,20 @@ class KamikazeStrategy(BaseBotOperations):
         Returns:
             True si estamos en London Open (2am-5am EST) o NY Open (8am-11am EST)
         """
-        # Obtener hora actual en EST (asumimos que el sistema está configurado en EST,
-        # o se puede ajustar según sea necesario)
-        current_time = datetime.now().time()
+        # Forzar trading ignora ventanas horarias
+        if self.force_trading:
+            return True
+        # Obtener hora actual convertida a EST independientemente de la zona local
+        try:
+            if ZoneInfo is not None:
+                now_est = datetime.now(tz=ZoneInfo("America/New_York"))
+                current_time = now_est.time()
+            else:
+                # Fallback: asumir hora local como aproximación si zoneinfo no está disponible
+                current_time = datetime.now().time()
+                self.logger.debug("ZoneInfo no disponible; usando hora local como fallback para horario de trading")
+        except Exception:
+            current_time = datetime.now().time()
         
         for start_time, end_time in self.trading_sessions:
             if start_time <= current_time < end_time:
@@ -83,28 +101,112 @@ class KamikazeStrategy(BaseBotOperations):
         gemini_config = GeminiConfig(
             model="gemini-2.5-pro",
             temperature=0.1, # Baja temperatura para respuestas concisas
-            max_tokens=100,
+            max_tokens=2048,  # Incrementado para evitar restricciones
             top_p=0.8,
             top_k=40,
             use_vertex_ai=False # Usar cliente estándar por defecto
         )
         
         self.gemini_client = GeminiClient(api_key=api_key, config=gemini_config)
+        # Elevar nivel de log a DEBUG para mayor visibilidad de ciclos/decisiones
+        try:
+            self.logger.set_level(LogLevel.DEBUG)
+        except Exception:
+            pass
         self.logger.info("✅ Estrategia Kamikaze inicializada con Gemini 2.5 Pro")
+        # Pregunta inicial a Gemini para establecer bias de inmediato, solo si dentro de horario o forzado
+        try:
+            if self.is_trading_time():
+                self.logger.info("🚀 Solicitud inicial de Bias a Gemini para arrancar operación")
+                self.update_market_bias()
+                self.last_gemini_call = time.time()
+            else:
+                self.logger.info("⏳ Fuera de horario habilitado; se omitirá la consulta inicial a Gemini para ahorrar tokens")
+        except Exception as e:
+            self.logger.warning(f"No se pudo establecer Bias inicial con Gemini: {e}")
         return True
+
+    def run_continuous(self, interval_seconds: int = 300) -> None:
+        """Ejecuta el bot en modo continuo sincronizado con velas M5.
+
+        Ciclos programados: :01, :06, :11, :16, ... de cada hora
+        (1 minuto después del cierre de vela M5) según documentación Kamikaze.
+        La consulta a Gemini para Bias se mantiene cada 30 minutos.
+        """
+        if not self.is_initialized:
+            self.logger.error("Bot no inicializado.")
+            return
+
+        import time as _time
+        from datetime import datetime as _dt, timedelta as _td
+
+        self.logger.info("Iniciando modo continuo Kamikaze (ciclos M5 a :01/:06/:11/:16/...)")
+
+        def _next_cycle_time() -> _dt:
+            now = _dt.now()
+            # Cierres M5 en :00, :05, :10, ... :55 -> ciclo en +1 minuto
+            minute = now.minute
+            # Próximo múltiplo de 5
+            next_close = ((minute // 5) * 5 + 5) % 60
+            cycle_min = (next_close + 1) % 60
+            next_time = now.replace(minute=cycle_min, second=0, microsecond=0)
+            # Ajuste de hora si cruzamos 60
+            if next_close == 0 and minute >= 55:
+                next_time += _td(hours=1)
+            # Si ya pasó, sumar 5 minutos
+            if next_time <= now:
+                next_time += _td(minutes=5)
+            return next_time
+
+        try:
+            while True:
+                next_cycle = _next_cycle_time()
+                wait_seconds = (next_cycle - _dt.now()).total_seconds()
+                if wait_seconds > 0:
+                    self.logger.info(
+                        f"⏳ Próximo ciclo: {next_cycle.strftime('%H:%M:%S')} (en {wait_seconds:.0f}s)"
+                    )
+                    _time.sleep(wait_seconds)
+
+                start_ts = _dt.now().strftime('%H:%M:%S')
+                if self.verbose:
+                    self.logger.info(f"🔄 Inicio ciclo técnico {start_ts}")
+                else:
+                    self.logger.debug(f"🔄 Inicio ciclo técnico {start_ts}")
+                try:
+                    self.run_trading_cycle()
+                except Exception as e:
+                    self.logger.error(f"Error en ciclo de trading: {e}")
+        except KeyboardInterrupt:
+            self.logger.info("Modo continuo interrumpido por usuario")
+            raise
 
     def run_trading_cycle(self) -> None:
         """Ciclo principal de trading."""
         if not self.is_initialized:
             self.logger.error("Bot no inicializado.")
             return
+        # Inicio de ciclo técnico
+        now_ts = datetime.now().strftime("%H:%M:%S")
+        # Mostrar inicio de ciclo siempre en verbose
+        if self.verbose:
+            self.logger.info(f"🔄 Inicio ciclo técnico {now_ts}")
+        else:
+            self.logger.debug(f"🔄 Inicio ciclo técnico {now_ts}")
 
         # 1. Actualizar Bias con Gemini si es necesario
         # Si nunca se ha llamado (0) o pasó el intervalo
+        # Evitar consultas fuera de horario para ahorrar tokens, salvo force_trading
         if time.time() - self.last_gemini_call > self.gemini_interval:
-            self.logger.info("⏰ Hora de actualizar Bias de Mercado con Gemini...")
-            self.update_market_bias()
-            self.last_gemini_call = time.time()
+            if self.is_trading_time():
+                self.logger.info("⏰ Hora de actualizar Bias de Mercado con Gemini...")
+                self.update_market_bias()
+                self.last_gemini_call = time.time()
+            else:
+                if self.verbose:
+                    self.logger.info("🪙 Fuera de horario; se evita consulta a Gemini para ahorrar tokens")
+                else:
+                    self.logger.debug("🪙 Fuera de horario; se evita consulta a Gemini para ahorrar tokens")
 
         # 2. Ejecutar lógica técnica para cada símbolo
         for symbol in self.config.symbols:
@@ -164,14 +266,21 @@ class KamikazeStrategy(BaseBotOperations):
         
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        prompt = f"""Analyze the price data below for {symbol}. Current time: {current_time}
+        prompt = f"""You are a technical market analyst. Analyze H1 price data for {symbol}.
 
-Recent H1 candles (last one marked OPEN is forming):
+Server time: {current_time}
+
+H1 Candlestick Data (OPEN status = still forming):
 {data_str}
 
-Based on the recent highs and lows pattern, determine the immediate trend direction.
-Respond with ONLY ONE WORD: "BULLISH", "BEARISH", or "RANGING".
-No explanation needed."""
+Task: Determine the immediate trend direction based on price structure.
+
+IMPORTANT: Respond ONLY with valid JSON in this exact format:
+{{
+  "trend": "BULLISH or BEARISH or RANGING"
+}}
+
+Do not include any other text or explanation."""
         
         response = self.gemini_client.send_prompt(prompt)
         
@@ -179,7 +288,22 @@ No explanation needed."""
             self.logger.error(f"Fallo Gemini para {symbol}: {response.error_message}")
             return "NEUTRAL"
             
-        text = response.content.strip().upper()
+        # Parse JSON response
+        try:
+            import json
+            # Remove markdown code blocks if present
+            content = response.content.strip()
+            if content.startswith("```json"):
+                content = content.replace("```json", "").replace("```", "").strip()
+            elif content.startswith("```"):
+                content = content.replace("```", "").strip()
+            
+            data = json.loads(content)
+            text = data.get("trend", "NEUTRAL").strip().upper()
+        except Exception as e:
+            self.logger.warning(f"Error parseando JSON de Gemini: {e}. Respuesta raw: {response.content[:200]}")
+            # Fallback: buscar las palabras clave en el texto
+            text = response.content.strip().upper()
         
         if "BULLISH" in text: return "BULLISH"
         if "BEARISH" in text: return "BEARISH"
@@ -260,21 +384,37 @@ No explanation needed."""
         """Verifica gatillos técnicos M5 y ejecuta operaciones usando reconocimiento de patrones."""
         # 0. Verificar horario de trading (Sniper Mode)
         if not self.is_trading_time():
+            # Log visible para confirmar si está fuera de horario
+            if self.verbose:
+                self.logger.info(f"⏱️ Fuera de horario de trading para {symbol}. Sesiones EST: 02:00-05:00 y 08:00-11:00")
+            else:
+                self.logger.debug(f"⏱️ Fuera de horario de trading para {symbol}. Sesiones EST: 02:00-05:00 y 08:00-11:00")
             return
         
         # 1. Verificar si ya hay posición abierta para este símbolo
         if self.check_open_positions(symbol):
+            if self.verbose:
+                self.logger.info(f"🛡️ Posición ya abierta en {symbol}; se omite nuevo gatillo")
+            else:
+                self.logger.debug(f"🛡️ Posición ya abierta en {symbol}; se omite nuevo gatillo")
             return
 
         # 2. Verificar límite de posiciones totales (máximo 2 posiciones abiertas)
         total_positions = len(self.mt5_connection.get_positions())
         if total_positions >= 2:
-            self.logger.debug(f"Límite de posiciones alcanzado ({total_positions}/2)")
+            if self.verbose:
+                self.logger.info(f"🚫 Límite de posiciones alcanzado ({total_positions}/2); no se abrirán nuevas")
+            else:
+                self.logger.debug(f"🚫 Límite de posiciones alcanzado ({total_positions}/2); no se abrirán nuevas")
             return
 
         # 3. Obtener Bias actual de Gemini
         bias = self.market_bias.get(symbol, "NEUTRAL")
         if bias == "NEUTRAL":
+            if self.verbose:
+                self.logger.info(f"⚖️ Bias NEUTRAL para {symbol}; se omite apertura")
+            else:
+                self.logger.debug(f"⚖️ Bias NEUTRAL para {symbol}; se omite apertura")
             return
 
         # 4. Obtener datos M5 (100 velas para calcular EMA 50 con datos suficientes)
@@ -286,10 +426,18 @@ No explanation needed."""
                 exclude_current=True  # Solo velas cerradas para evitar repinte
             )
         except MT5DataError:
+            if self.verbose:
+                self.logger.info(f"📉 No se pudieron obtener datos M5 para {symbol}; se omite ciclo")
+            else:
+                self.logger.debug(f"📉 No se pudieron obtener datos M5 para {symbol}; se omite ciclo")
             return
 
         df_m5 = ohlcv_m5.data
         if len(df_m5) < 2:
+            if self.verbose:
+                self.logger.info(f"📊 Datos insuficientes M5 ({len(df_m5)} velas) en {symbol}; se omite")
+            else:
+                self.logger.debug(f"📊 Datos insuficientes M5 ({len(df_m5)} velas) en {symbol}; se omite")
             return
 
         # 4.1 Calcular EMA 50 para contexto (NO como filtro bloqueante)
@@ -315,6 +463,16 @@ No explanation needed."""
                 f"📊 Patrón detectado en {symbol}: {pattern} | Bias={bias} | "
                 f"Price={current_price:.5f}, EMA50={ema_str}, Position={price_vs_ema}"
             )
+        else:
+            # En verbose, mostrar este resumen como INFO para confirmar evaluación
+            if self.verbose:
+                self.logger.info(
+                    f"🔎 Sin patrón válido en {symbol} | Bias={bias} | Price={current_price:.5f}, EMA50={ema_str}, Position={price_vs_ema}"
+                )
+            else:
+                self.logger.debug(
+                    f"🔎 Sin patrón válido en {symbol} | Bias={bias} | Price={current_price:.5f}, EMA50={ema_str}, Position={price_vs_ema}"
+                )
 
         # 6. LÓGICA DE FRANCOTIRADOR: Confluencia de Bias + Patrón
         
@@ -339,6 +497,16 @@ No explanation needed."""
             )
             self.place_order(symbol, OrderType.SELL)
             return
+
+        # 7. Reporte cuando hay confluencia insuficiente
+        if self.verbose:
+            self.logger.info(
+                f"🧩 Sin confluencia suficiente para {symbol}: Bias={bias}, Pattern={pattern or 'None'}"
+            )
+        else:
+            self.logger.debug(
+                f"🧩 Sin confluencia suficiente para {symbol}: Bias={bias}, Pattern={pattern or 'None'}"
+            )
 
     def check_open_positions(self, symbol: str) -> bool:
         """Verifica si hay posiciones abiertas para el símbolo."""
