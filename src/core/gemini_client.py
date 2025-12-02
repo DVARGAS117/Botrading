@@ -33,11 +33,19 @@ import json
 try:
     import google.generativeai as genai
     from google.generativeai.types import GenerationConfig
+    # Enums de seguridad (opcionales según versión)
+    try:
+        from google.generativeai.types import HarmCategory, HarmBlockThreshold  # type: ignore
+    except Exception:
+        HarmCategory = None  # type: ignore
+        HarmBlockThreshold = None  # type: ignore
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
     GenerationConfig = None  # type: ignore
     genai = None  # type: ignore
+    HarmCategory = None  # type: ignore
+    HarmBlockThreshold = None  # type: ignore
     logging.warning("google-generativeai no está instalado. Instala con: pip install google-generativeai")
 
 try:
@@ -306,27 +314,33 @@ class GeminiClient:
             # Configurar API
             genai.configure(api_key=self.api_key)
             
-            # Configurar safety settings para desactivar filtros
-            self.safety_settings = [
-                {
-                    "category": "HARM_CATEGORY_HARASSMENT",
-                    "threshold": "BLOCK_NONE"
-                },
-                {
-                    "category": "HARM_CATEGORY_HATE_SPEECH",
-                    "threshold": "BLOCK_NONE"
-                },
-                {
-                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                    "threshold": "BLOCK_NONE"
-                },
-                {
-                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                    "threshold": "BLOCK_NONE"
-                }
-            ]
+            # Configurar safety settings para desactivar filtros (por solicitud y a nivel de modelo)
+            # Preferir enums si están disponibles; fallback a dicts de strings
+            if HarmCategory is not None and HarmBlockThreshold is not None:
+                try:
+                    self.safety_settings = [
+                        {"category": HarmCategory.HARASSMENT, "threshold": HarmBlockThreshold.BLOCK_NONE},
+                        {"category": HarmCategory.HATE_SPEECH, "threshold": HarmBlockThreshold.BLOCK_NONE},
+                        {"category": HarmCategory.SEXUALLY_EXPLICIT, "threshold": HarmBlockThreshold.BLOCK_NONE},
+                        {"category": HarmCategory.DANGEROUS_CONTENT, "threshold": HarmBlockThreshold.BLOCK_NONE},
+                    ]
+                except Exception:
+                    # Fallback a strings si la versión no soporta enums
+                    self.safety_settings = [
+                        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+                    ]
+            else:
+                self.safety_settings = [
+                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+                ]
             
-            # Inicializar modelo
+            # Inicializar modelo (aplicar safety_settings por defecto a la instancia)
             self.model = genai.GenerativeModel(
                 self.config.model,
                 safety_settings=self.safety_settings
@@ -567,17 +581,35 @@ class GeminiClient:
                 if conversation_id is not None:
                     # Usar conversación para mantener contexto
                     chat_session = self.get_conversation(conversation_id)
-                    response = chat_session.send_message(
-                        content,
-                        generation_config=generation_config
-                    )
+                    # Pasar también safety_settings en cada request para asegurar aplicación
+                    try:
+                        response = chat_session.send_message(
+                            content,
+                            generation_config=generation_config,
+                            safety_settings=self.safety_settings
+                        )
+                    except TypeError:
+                        # Algunas versiones no aceptan safety_settings en chat; retry sin ese argumento
+                        response = chat_session.send_message(
+                            content,
+                            generation_config=generation_config
+                        )
                 else:
                     # Envío directo sin contexto
-                    response = self.model.generate_content(
-                        content,
-                        generation_config=generation_config,
-                        request_options={'timeout': self.config.timeout}
-                    )
+                    try:
+                        response = self.model.generate_content(
+                            content,
+                            generation_config=generation_config,
+                            safety_settings=self.safety_settings,
+                            request_options={'timeout': self.config.timeout}
+                        )
+                    except TypeError:
+                        # Retry sin safety_settings si la versión no lo soporta en este método
+                        response = self.model.generate_content(
+                            content,
+                            generation_config=generation_config,
+                            request_options={'timeout': self.config.timeout}
+                        )
                 
                 latency = time.time() - start_time
                 
@@ -595,10 +627,58 @@ class GeminiClient:
                     latency=latency
                 )
                 
-                # Retornar respuesta exitosa
+                # Extraer texto de forma segura evitando fallo cuando no hay Parts
+                safe_text: Optional[str] = None
+                try:
+                    # Algunas versiones exponen finish_reason y candidatos
+                    finish_reason = None
+                    if hasattr(response, "candidates") and response.candidates:
+                        first = response.candidates[0]
+                        finish_reason = getattr(first, "finish_reason", None)
+                        # Intentar acceder a partes de contenido
+                        if hasattr(first, "content") and getattr(first.content, "parts", None):
+                            parts = first.content.parts
+                            # Concatenar textos de partes si existen
+                            texts = []
+                            for p in parts:
+                                # En algunas versiones, p tiene atributo text
+                                t = getattr(p, "text", None)
+                                if t:
+                                    texts.append(t)
+                            if texts:
+                                safe_text = "\n".join(texts).strip()
+                    # Fallback a response.text si ya es seguro
+                    if not safe_text and hasattr(response, "text"):
+                        # response.text puede lanzar si no hay Parts; envolver en try
+                        try:
+                            safe_text = response.text if response.text else None
+                        except Exception:
+                            safe_text = None
+                    # Si no hay texto y finish_reason indica bloqueo/no contenido, devolver error amigable
+                    if not safe_text:
+                        msg = "La respuesta de Gemini no contiene contenido válido (posible finish_reason=2: bloqueado o sin contenido)."
+                        if finish_reason is not None:
+                            msg = f"finish_reason={finish_reason}; respuesta sin contenido válido."
+                        # Actualizar estadísticas como fallo lógico de contenido
+                        self._update_statistics(success=False)
+                        return GeminiResponse(
+                            success=False,
+                            error_message=msg,
+                            error_type="no_content"
+                        )
+                except Exception as _:
+                    # En caso de cualquier problema al extraer contenido, retornar fallo controlado
+                    self._update_statistics(success=False)
+                    return GeminiResponse(
+                        success=False,
+                        error_message="Error extrayendo contenido de la respuesta de Gemini",
+                        error_type="content_parse_error"
+                    )
+
+                # Retornar respuesta exitosa con contenido seguro
                 return GeminiResponse(
                     success=True,
-                    content=response.text,
+                    content=safe_text,
                     tokens_input=tokens_input,
                     tokens_output=tokens_output,
                     cost=cost,
